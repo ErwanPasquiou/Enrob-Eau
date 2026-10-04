@@ -172,7 +172,7 @@ with content:
                 </div>
 
                 <h1 class="home-title">
-                    Bonjour {safe_prenom} 👋
+                    Bonjour {safe_prenom} 👋 Environnement de développement
                 </h1>
 
                 <div class="home-description">
