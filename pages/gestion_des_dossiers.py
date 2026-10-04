@@ -125,7 +125,9 @@ with create_page_content():
         query = search.text_input("Rechercher", placeholder="Référence, commune, motif…", key="dossier_query")
         cities = city.multiselect("Communes", sorted({r["ReportedCity"] for r in store["demandes"] if r["ReportedCity"]}), placeholder="Toutes les communes", key="dossier_cities")
         statuses = status.multiselect("Statuts des demandes", sorted({r["RequestStatus"] for r in store["demandes"] if r["RequestStatus"]}), placeholder="Tous les statuts", key="dossier_statuses")
-        period = dates.date_input("Période des demandes", value=(), format="DD/MM/YYYY", key="dossier_period")
+        # Reprendre la période avant de recréer le widget, sans double affectation.
+        period_value = st.session_state.pop("dossier_period", ())
+        period = dates.date_input("Période des demandes", value=period_value, format="DD/MM/YYYY", key="dossier_period")
         if len(period) == 1:
             st.caption("Sélectionnez la date de fin pour appliquer la période.")
         filtered = filter_store(store, query, cities, statuses, period)
