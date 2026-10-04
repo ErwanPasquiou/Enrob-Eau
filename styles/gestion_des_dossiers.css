@@ -1,0 +1,211 @@
+/* Styles limites a l'espace de gestion des dossiers. */
+.dossiers-page-marker,
+.dossier-master-marker,
+.dossier-detail-marker,
+.dossiers-content-start { display: none; }
+
+.stApp:has(.dossiers-page-marker) {
+    background-image: none;
+    background-color: #F5F8FB;
+}
+.stApp:has(.dossiers-page-marker) [data-testid="stVerticalBlock"] {
+    gap: 0.65rem;
+}
+.stApp:has(.dossiers-page-marker) [data-testid="column"]:has(.dossier-detail-marker),
+.stApp:has(.dossiers-page-marker) [data-testid="stColumn"]:has(.dossier-detail-marker) {
+    background: #FFFFFF;
+    padding: 16px;
+    border-left: 1px solid #DDE5ED;
+    min-width: 0;
+}
+.stApp:has(.dossiers-page-marker) .block-container {
+    padding: 0 24px 28px !important;
+}
+.stApp:has(.dossiers-page-marker) .enrobeau-header {
+    width: calc(100% + 48px);
+    margin-left: -24px;
+}
+.stApp:has(.dossiers-page-marker) h1 {
+    padding: 0.25rem 0 0.5rem;
+    font-size: 28px;
+    color: #003B5C;
+    letter-spacing: 0;
+}
+.stApp:has(.dossiers-page-marker) h3 {
+    font-size: 19px;
+    color: #003B5C;
+    letter-spacing: 0;
+}
+.stApp:has(.dossiers-page-marker) [data-testid="stButton"] button,
+.stApp:has(.dossiers-page-marker) [data-testid="stDownloadButton"] button {
+    min-height: 44px;
+    border-radius: 6px;
+}
+.stApp:has(.dossiers-page-marker) button p {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+}
+.stApp:has(.dossiers-page-marker) [data-baseweb="tab-list"] {
+    overflow-x: auto;
+    gap: 14px;
+}
+.stApp:has(.dossiers-page-marker) [data-baseweb="tab"] {
+    flex-shrink: 0;
+    min-height: 44px;
+}
+.dossier-legend {
+    padding: 10px 0;
+    color: #566980;
+    font-size: 11px;
+    line-height: 1.7;
+    border-bottom: 1px solid #DDE5ED;
+}
+.dossier-progress {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 5px;
+    align-items: start;
+    padding: 10px 0;
+    width: 100%;
+}
+.dossier-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+}
+.stage-dot {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    color: #FFFFFF;
+    font-size: 11px;
+    font-weight: 700;
+}
+.stage-dot.pending { background: #2478D4; }
+.stage-dot.done { background: #258343; }
+.stage-dot.refused { background: #b42318; }
+.dossier-stage.refused .stage-label { color: #b42318; }
+.stage-dot:focus-visible { outline: 2px solid #003B5C; outline-offset: 3px; }
+.stage-label {
+    color: #486078;
+    text-align: center;
+    font-size: 10px;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+/* Les styles explicites des cellules evitent les marges des listes dl/dt/dd. */
+.stApp [data-testid="stHtml"] table.dossier-properties,
+.stApp [data-testid="stHtml"] table.dossier-dates {
+    width: 100%;
+    table-layout: fixed;
+    border-collapse: collapse;
+    border: 0;
+    margin: 0 0 12px;
+}
+.stApp [data-testid="stHtml"] .dossier-properties th,
+.stApp [data-testid="stHtml"] .dossier-properties td,
+.stApp [data-testid="stHtml"] .dossier-dates th,
+.stApp [data-testid="stHtml"] .dossier-dates td {
+    padding: 7px 6px;
+    margin: 0;
+    border: 0;
+    border-bottom: 1px solid #E4ECF2;
+    background: transparent;
+    font-size: 12px;
+    line-height: 1.4;
+    vertical-align: top;
+    text-align: left;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+.stApp [data-testid="stHtml"] .dossier-properties th {
+    width: 40%;
+    color: #62758A;
+    font-weight: 400;
+}
+.stApp [data-testid="stHtml"] .dossier-properties td,
+.stApp [data-testid="stHtml"] .dossier-dates td { color: #193B58; }
+.stApp [data-testid="stHtml"] .dossier-dates th,
+.stApp [data-testid="stHtml"] .dossier-dates td {
+    padding: 2px 0;
+    border: 0;
+    font-size: 11px;
+}
+.stApp [data-testid="stHtml"] .dossier-dates th {
+    width: 55%;
+    font-weight: 400;
+    color: #62758A;
+}
+.stApp [data-testid="stHtml"] .dossier-dates td { text-align: right; }
+
+@media (max-width: 1100px) {
+    .stApp:has(.dossiers-page-marker) [data-testid="stHorizontalBlock"]:has(.dossier-master-marker) > [data-testid="column"],
+    .stApp:has(.dossiers-page-marker) [data-testid="stHorizontalBlock"]:has(.dossier-master-marker) > [data-testid="stColumn"] {
+        flex: 1 1 100%;
+        min-width: 100%;
+    }
+    .stApp:has(.dossiers-page-marker) [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap;
+    }
+    .stApp:has(.dossiers-page-marker) [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+    .stApp:has(.dossiers-page-marker) [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+        min-width: min(100%, 280px);
+        flex: 1 1 280px;
+    }
+}
+@media (max-width: 700px) {
+    .stApp:has(.dossiers-page-marker) [data-testid="stHorizontalBlock"] > [data-testid="stColumn"],
+    .stApp:has(.dossiers-page-marker) [data-testid="stHorizontalBlock"] > [data-testid="column"] {
+        min-width: 100%;
+        flex: 1 1 100%;
+    }
+    .stApp:has(.dossiers-page-marker) h1 { font-size: 24px; }
+}
+
+/* Fil d'Ariane commun à la liste et au détail. */
+.dossier-progress {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0;
+    list-style: none;
+    margin: 0;
+    padding: 12px 0 16px;
+}
+.dossier-progress .dossier-stage { position: relative; }
+.dossier-progress .dossier-stage:not(:last-child)::after {
+    content: "";
+    position: absolute;
+    top: 15px;
+    left: calc(50% + 18px);
+    width: calc(100% - 36px);
+    height: 2px;
+    background: #C8D8E8;
+}
+.dossier-progress .dossier-stage.done:not(:last-child)::after { background: #85BD98; }
+.dossier-progress .stage-dot { width: 32px; height: 32px; font-size: 13px; }
+.dossier-progress .stage-label { font-size: 11px; font-weight: 600; }
+.dossier-progress.compact { padding: 4px 0 14px; }
+.dossier-progress.compact .stage-dot { width: 24px; height: 24px; font-size: 11px; }
+.dossier-progress.compact .stage-label { font-size: 10px; }
+.dossier-progress.compact .dossier-stage:not(:last-child)::after {
+    top: 11px;
+    left: calc(50% + 14px);
+    width: calc(100% - 28px);
+}
+.dossier-export-marker { display: none; }
+/* Conserver les trois exports sur une ligne, y compris aux petits formats. */
+.stApp:has(.dossiers-page-marker) [data-testid="stHorizontalBlock"]:has(.dossier-export-marker) {
+    flex-wrap: nowrap;
+    gap: 8px;
+}
+.stApp:has(.dossiers-page-marker) [data-testid="stHorizontalBlock"]:has(.dossier-export-marker) > [data-testid="stColumn"],
+.stApp:has(.dossiers-page-marker) [data-testid="stHorizontalBlock"]:has(.dossier-export-marker) > [data-testid="column"] {
+    min-width: 0;
+    flex: 1 1 0;
+}

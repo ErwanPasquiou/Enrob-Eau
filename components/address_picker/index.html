@@ -1,0 +1,41 @@
+﻿<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{margin:0;font:15px system-ui,sans-serif;color:#193b58}label{display:block;margin:0 0 6px}input,button{font:inherit;box-sizing:border-box;min-height:46px;border:1px solid #cad5df;border-radius:8px;padding:10px;width:100%;background:#fff;color:inherit}input:focus,button:focus-visible{outline:2px solid #2478d4}#results{display:grid;gap:5px;margin-top:8px}#results button{text-align:left;background:#f5f8fb}#status{font-size:13px;margin:8px 0}small{color:#62758a}button:hover{background:#e9f2fa}
+</style></head><body>
+<label for="address">Rechercher une adresse</label><input id="address" autocomplete="off" placeholder="Numéro, rue et commune…" aria-describedby="status">
+<div id="status" role="status">Saisissez au moins 3 caractères.</div><div id="results"></div>
+<small>Adresses : IGN / Base Adresse Nationale</small>
+<script>
+const input=document.getElementById('address'),results=document.getElementById('results'),status=document.getElementById('status');
+const send=(type,data={})=>parent.postMessage({isStreamlitMessage:true,type,...data},'*');
+const resize=()=>send('streamlit:setFrameHeight',{height:document.body.scrollHeight+8});
+let timer,controller,serial=0,initialized=false,selected=false;
+const emit=value=>send('streamlit:setComponentValue',{value,dataType:'json'});
+window.addEventListener('message',e=>{if(e.source!==parent||e.data.type!=='streamlit:render')return;if(!initialized){input.value=e.data.args.initial||'';initialized=true;}resize();});
+input.addEventListener('input',()=>{
+ clearTimeout(timer);controller?.abort();const token=++serial;results.replaceChildren();
+ if(selected){selected=false;emit(null);}
+ if(input.value.trim().length<3){status.textContent='Saisissez au moins 3 caractères.';resize();return;}
+ status.textContent='Recherche…';resize();
+ timer=setTimeout(async()=>{
+  controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),8000);
+  try{
+   const url=new URL('https://data.geopf.fr/geocodage/search');url.search=new URLSearchParams({q:input.value.trim(),index:'address',limit:'6',autocomplete:'1'});
+   const response=await fetch(url,{signal:controller.signal});if(!response.ok)throw Error('service');
+   const data=await response.json();if(token!==serial)return;
+   const features=Array.isArray(data.features)?data.features:[];
+   status.textContent=features.length?'Choisissez une adresse proposée.':'Aucune adresse trouvée. Utilisez « Autre / saisie libre ».';
+   for(const feature of features){
+    const p=feature.properties||{},xy=feature.geometry?.coordinates;
+    if(!p.city||!p.name)continue;
+    const button=document.createElement('button');button.type='button';button.textContent=p.label||`${p.name}, ${p.postcode||''} ${p.city}`;
+    button.addEventListener('click',()=>{selected=true;input.value=button.textContent;results.replaceChildren();status.textContent='Adresse sélectionnée.';resize();emit({address:p.name,city:p.city,label:button.textContent,longitude:xy?.[0],latitude:xy?.[1]});});
+    results.append(button);
+   }
+  }catch(error){if(token===serial)status.textContent='Recherche indisponible. Utilisez « Autre / saisie libre ».';}
+  finally{clearTimeout(timeout);resize();}
+ },350);
+});
+send('streamlit:componentReady',{apiVersion:1});resize();
+</script></body></html>

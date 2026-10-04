@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.idea/
+.vscode/
+.env
+data/exemples/photos.sqlite3*
+data/exemples/administration.sqlite3*
+data/exemples/backups/
+.databricks/
+.streamlit/secrets.toml

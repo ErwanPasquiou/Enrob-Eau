@@ -1,0 +1,187 @@
+
+/* ============================================================
+   ENROB'EAU
+   CSS GLOBAL
+   ============================================================ */
+
+
+/* ============================================================
+   1. VARIABLES DU THEME
+   ============================================================ */
+
+:root {
+
+    /* Couleurs principales */
+
+    --enrobeau-primary: #003B5C;
+
+    --enrobeau-primary-dark: #1B2B5B;
+
+    --enrobeau-accent: #1FB4E8;
+
+
+    /* Fonds */
+
+    --enrobeau-background: #F4F8FB;
+
+    --enrobeau-surface: #FFFFFF;
+
+
+    /* Textes */
+
+    --enrobeau-text: #323130;
+
+    --enrobeau-text-muted: #605E5C;
+
+
+    /* Bordures */
+
+    --enrobeau-border: #DFE2E5;
+
+
+    /* Etats */
+
+    --enrobeau-success: #21865B;
+
+    --enrobeau-danger: #C0392B;
+
+
+    /* Arrondis */
+
+    --enrobeau-radius-sm: 6px;
+
+    --enrobeau-radius-md: 10px;
+
+    --enrobeau-radius-lg: 16px;
+
+}
+
+
+/* ============================================================
+   2. RESET GLOBAL
+   ============================================================ */
+
+html,
+body {
+
+    margin: 0;
+
+    padding: 0;
+
+}
+
+
+/* ============================================================
+   3. CONTENEUR STREAMLIT
+   ============================================================ */
+
+.block-container {
+
+    max-width: 100%;
+
+    padding: 0 !important;
+
+    margin: 0 !important;
+
+}
+
+
+/* ============================================================
+   4. MASQUAGE DES ELEMENTS STREAMLIT
+   ============================================================ */
+
+header[data-testid="stHeader"] {
+
+    display: none;
+
+}
+
+
+#MainMenu {
+
+    display: none;
+
+}
+
+
+footer {
+
+    display: none;
+
+}
+
+
+/* ============================================================
+   5. FOND GLOBAL DE L'APPLICATION
+   ============================================================ */
+
+.stApp {
+
+    background-color: var(--enrobeau-background);
+
+    background-image: var(
+        --enrobeau-wave-image,
+        none
+    );
+
+    background-size: 100% auto;
+
+    background-position: center bottom;
+
+    background-repeat: no-repeat;
+
+    background-attachment: scroll;
+
+    min-height: 100vh;
+
+}
+
+
+/* ============================================================
+   6. ESPACEMENT DU CONTENU
+   ============================================================ */
+
+.enrobeau-page-spacer {
+
+    height: 18px;
+
+}
+
+
+/* ============================================================
+   7. CLASSES COMMUNES REUTILISABLES
+   ============================================================ */
+
+.enrobeau-section-title {
+
+    color: var(--enrobeau-primary);
+
+    font-size: 24px;
+
+    font-weight: 700;
+
+    margin-bottom: 12px;
+
+}
+
+
+.enrobeau-card {
+
+    background: var(--enrobeau-surface);
+
+    border: 1px solid var(--enrobeau-border);
+
+    border-radius: var(--enrobeau-radius-lg);
+
+    padding: 24px;
+
+}
+
+
+.enrobeau-muted {
+
+    color: var(--enrobeau-text-muted);
+
+    font-size: 14px;
+
+}

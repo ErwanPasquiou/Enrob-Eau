@@ -1,0 +1,6 @@
+streamlit~=1.38.0
+pandas~=2.2.3
+streamlit-shadcn-ui==0.1.19
+databricks-sdk
+databricks-sql-connector
+Pillow>=10,<12

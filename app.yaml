@@ -1,0 +1,14 @@
+command:
+  - streamlit
+  - run
+  - app.py
+
+env:
+  - name: DATABRICKS_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+
+  - name: ADMINISTRATION_TABLE
+    valueFrom: administration_table
+
+  - name: STREAMLIT_GATHER_USAGE_STATS
+    value: "false"

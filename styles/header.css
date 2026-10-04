@@ -1,0 +1,424 @@
+
+/* ============================================================
+   ENROB'EAU
+   HEADER
+   ============================================================ */
+
+
+/* ============================================================
+   1. HEADER PRINCIPAL
+   ============================================================ */
+
+.enrobeau-header {
+
+    position: relative;
+
+    width: 100%;
+
+    height: 72px;
+
+    overflow: hidden;
+
+    margin: 0;
+
+    padding: 0;
+
+}
+
+
+/* ============================================================
+   2. IMAGE DE FOND DU HEADER
+   ============================================================ */
+
+.header-banner {
+
+    position: absolute;
+
+    top: 0;
+
+    left: 0;
+
+    width: 100%;
+
+    height: 72px;
+
+    object-fit: fill;
+
+    pointer-events: none;
+
+    z-index: 0;
+
+}
+
+
+/* ============================================================
+   3. CONTENU DU HEADER
+   ============================================================ */
+
+.header-content {
+
+    position: relative;
+
+    z-index: 1;
+
+    width: 100%;
+
+    height: 54px;
+
+    display: grid;
+
+    grid-template-columns:
+        360px
+        minmax(0, 1fr)
+        150px;
+
+    align-items: center;
+
+}
+
+
+/* ============================================================
+   4. ZONE LOGO
+   ============================================================ */
+
+.brand-zone {
+
+    height: 54px;
+
+    display: flex;
+
+    align-items: center;
+
+    padding-left: 24px;
+
+    text-decoration: none;
+
+}
+
+
+.brand-image {
+
+    display: block;
+
+    width: 190px;
+
+    height: 50px;
+
+    object-fit: contain;
+
+    object-position: left center;
+
+    /*
+       Conservation du blend-mode pour intégrer
+       le PNG actuel dans le bandeau bleu.
+    */
+
+    mix-blend-mode: screen;
+
+}
+
+
+/* ============================================================
+   5. NAVIGATION
+   ============================================================ */
+
+.nav-zone {
+
+    min-width: 0;
+
+    height: 54px;
+
+    display: flex;
+
+    align-items: stretch;
+
+    justify-content: center;
+
+}
+
+
+.nav-item {
+
+    flex-shrink: 0;
+
+    position: relative;
+
+    height: 54px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    padding: 0 18px;
+
+    color: rgba(255, 255, 255, 0.90);
+
+    font-family:
+        "Segoe UI",
+        Arial,
+        sans-serif;
+
+    font-size: 13px;
+
+    font-weight: 400;
+
+    line-height: 1;
+
+    white-space: nowrap;
+
+    text-decoration: none;
+
+    cursor: pointer;
+
+    transition:
+        color 0.15s ease;
+
+}
+
+
+.enrobeau-header a.nav-item:not(.active),
+.enrobeau-header a.admin-button:not(.active) {
+
+    color: #FFFFFF !important;
+
+}
+
+
+.nav-item:hover {
+
+    color: #FFFFFF;
+
+}
+
+
+.nav-item.active {
+
+    color: #FFFFFF;
+
+    font-weight: 600;
+
+}
+
+
+.nav-item.active::after {
+
+    content: "";
+
+    position: absolute;
+
+    left: 50%;
+
+    bottom: 5px;
+
+    transform: translateX(-50%);
+
+    width: 43px;
+
+    height: 3px;
+
+    border-radius: 999px;
+
+    background: var(--enrobeau-accent);
+
+    box-shadow:
+        0 0 4px rgba(31, 180, 232, 0.95),
+        0 0 8px rgba(31, 180, 232, 0.60);
+
+}
+
+
+/* ============================================================
+   6. ZONE UTILISATEUR
+   ============================================================ */
+
+.user-zone {
+
+    height: 38px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: flex-end;
+
+    gap: 14px;
+
+    padding-left: 18px;
+
+    padding-right: 22px;
+
+    border-left:
+        1px solid
+        rgba(255, 255, 255, 0.40);
+
+}
+
+
+/* ============================================================
+   7. BOUTON ADMINISTRATION
+   ============================================================ */
+
+.admin-button {
+
+    width: 34px;
+
+    height: 34px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    border-radius: 8px;
+
+    color: rgba(255, 255, 255, 0.90);
+
+    text-decoration: none;
+
+    font-family:
+        "Segoe UI Symbol",
+        "Segoe UI",
+        Arial,
+        sans-serif;
+
+    font-size: 21px;
+
+    line-height: 1;
+
+    cursor: pointer;
+
+    transition:
+        background 0.15s ease,
+        color 0.15s ease,
+        transform 0.15s ease;
+
+}
+
+
+.admin-button:hover {
+
+    color: #FFFFFF;
+
+    background: rgba(255, 255, 255, 0.10);
+
+    transform: rotate(18deg);
+
+}
+
+
+.admin-button.active {
+
+    color: var(--enrobeau-accent);
+
+    background: rgba(31, 180, 232, 0.14);
+
+}
+
+
+/* ============================================================
+   8. AVATAR UTILISATEUR
+   ============================================================ */
+
+.avatar {
+
+    width: 34px;
+
+    height: 34px;
+
+    display: flex;
+
+    align-items: center;
+
+    justify-content: center;
+
+    flex-shrink: 0;
+
+    border-radius: 50%;
+
+    background: #E8F4FB;
+
+    border:
+        2px solid
+        rgba(255, 255, 255, 0.32);
+
+    color: #243977;
+
+    font-family:
+        "Segoe UI",
+        Arial,
+        sans-serif;
+
+    font-size: 10px;
+
+    font-weight: 700;
+
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.14);
+
+}
+
+
+/* ============================================================
+   9. RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 1750px) {
+
+    .enrobeau-header,
+    .header-banner {
+        height: 126px;
+    }
+
+    .header-content {
+
+        grid-template-columns:
+            minmax(0, 1fr)
+            130px;
+        grid-template-rows: 54px 54px;
+        height: 108px;
+
+    }
+
+    .nav-zone {
+        grid-column: 1 / -1;
+        grid-row: 2;
+        justify-content: flex-start;
+        overflow-x: auto;
+    }
+
+    .user-zone {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+
+    .brand-image {
+
+        width: 160px;
+
+        height: 44px;
+
+    }
+
+
+    .nav-item {
+
+        font-size: 12px;
+
+    }
+
+
+    .user-zone {
+
+        gap: 8px;
+
+        padding-left: 12px;
+
+        padding-right: 14px;
+
+    }
+
+}
