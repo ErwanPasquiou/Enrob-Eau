@@ -61,13 +61,17 @@ Les demandes fournies avec le projet utilisent des e-mails fictifs : elles n'app
 
 La création et la modification partagent un formulaire sur **une seule page**, organisé en cinq sections bordées :
 
-1. **Localisation des travaux** : recherche d'adresse ou saisie libre, commune, repères/GPS et rues concernées.
+1. **Localisation des travaux** : recherche d'adresse ou saisie libre, commune et repères/GPS.
 2. **Informations sur la demande** : date, demandeur, client, domaine d'activité, fiche fuite, motif et Matricule Compteur.
 3. **Caractéristiques des travaux** : matériau, diamètre, types de voirie, revêtements et durée estimée.
-4. **Contraintes et préparation du chantier** : DICT / ATU, coupure d'eau, impacts sur la voirie, sécurité et conditions particulières.
+4. **Contraintes et préparation du chantier** : DICT / ATU, coupure d'eau, rues concernées par l'arrêt d'eau, impacts sur la voirie, sécurité et conditions particulières.
 5. **Commentaire complémentaire** : commentaire de la demande.
 
 Les huit listes ci-dessous sont obligatoires à la création et à l'enregistrement du formulaire de modification. Aucun choix métier n'est présélectionné pour une nouvelle demande.
+
+**Diamètre signalé** et **Durée estimée des travaux (jours)** sont également obligatoires à la création et à la modification. La borne minimale existante de zéro est conservée.
+
+**Rues concernées par l'arrêt d'eau** apparaît immédiatement après la coupure d'eau, uniquement pour **Avec arrêt d'eau 1 jour** ou **Avec arrêt d'eau 1/2 journée**. Le champ est masqué pour les autres choix. Une valeur déjà renseignée est conservée lorsqu'il est masqué ; aucune obligation de saisie supplémentaire n'est appliquée à ce champ.
 
 | Champ | Sélection | Valeurs autorisées |
 | --- | --- | --- |

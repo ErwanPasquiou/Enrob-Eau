@@ -163,10 +163,14 @@ def render_record_form(table, request_ref, original=None, parent=None, request=N
         st.session_state[values_key] = deepcopy(row)
         if table == "demandes":
             st.session_state[f"request_other_{prefix}"] = row["ReportedRoadTypeOther"]
+            for field in ("AffectedStreets", "MeterReference"):
+                st.session_state[f"request_hidden_{prefix}_{field}"] = row[field]
     refresh_uploads(photo_prefix, scope="fragment" if in_dialog else "app")
     if cancel:
         st.session_state.pop(values_key, None)
         st.session_state.pop(f"request_other_{prefix}", None)
+        for field in ("AffectedStreets", "MeterReference"):
+            st.session_state.pop(f"request_hidden_{prefix}_{field}", None)
         if mobile:
             st.session_state.forms_new = False
             st.session_state.forms_edit = False
@@ -186,6 +190,8 @@ def render_record_form(table, request_ref, original=None, parent=None, request=N
             clear_uploads(f"{prefix}_new_photos")
             st.session_state.pop(values_key, None)
             st.session_state.pop(f"request_other_{prefix}", None)
+            for field in ("AffectedStreets", "MeterReference"):
+                st.session_state.pop(f"request_hidden_{prefix}_{field}", None)
             st.session_state.pop(draft_key, None)
             if mobile:
                 st.session_state.forms_new = False

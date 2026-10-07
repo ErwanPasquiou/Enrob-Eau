@@ -244,7 +244,7 @@ record_dialog("prestations", "REQ-test", parent={"WorkOrderReferenceEnrobEau": "
             app.button(key=f"forms_view_{self.ref}").click().run(timeout=30)
             app.button(key="forms_modify").click().run(timeout=30)
             for field, value in valid_choices().items():
-                widgets = app.multiselect if field in MULTIPLE_FIELDS else app.selectbox
+                widgets = app.number_input if field in {"ReportedDiameter", "EstimatedWorkDays"} else app.multiselect if field in MULTIPLE_FIELDS else app.selectbox
                 widgets(key=f"{self.ref}_{field}").set_value(value)
             next(b for b in app.button if b.label == "Enregistrer les modifications").click().run(timeout=30)
         self.assertEqual(len(app.exception), 0)

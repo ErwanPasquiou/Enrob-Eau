@@ -34,6 +34,19 @@ class RequestCase(unittest.TestCase):
 
 
 class RequestEvolutionTests(RequestCase):
+    def test_diameter_and_duration_are_required_on_create_and_edit(self):
+        row = self.request()
+        for field in ("ReportedDiameter", "EstimatedWorkDays"):
+            for empty in (None, "", "  "):
+                with self.subTest(field=field, empty=empty), self.assertRaisesRegex(ValueError, "obligatoire"):
+                    edits.save_record("demandes", dict(row, **{field: empty}))
+        saved = edits.save_record("demandes", row)
+        for field in ("ReportedDiameter", "EstimatedWorkDays"):
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "obligatoire"):
+                edits.save_record("demandes", dict(saved, **{field: None}), saved)
+        # La règle existante autorise zéro ; aucune nouvelle borne n'est inventée.
+        edits.save_record("demandes", dict(saved, ReportedDiameter=0, EstimatedWorkDays=0), saved)
+
     def test_defaults_have_no_invented_business_values(self):
         row = edits.new_record("demandes")
         for field in REQUEST_CHOICES:
@@ -187,6 +200,39 @@ class RequestEvolutionTests(RequestCase):
 
 
 class RequestFormTests(RequestCase):
+    def test_streets_follow_shutdown_choice_and_preserve_hidden_value(self):
+        from components.request_form import REQUEST_GROUPS
+        fields = REQUEST_GROUPS[3][1].split()
+        self.assertEqual(fields[fields.index("WaterShutdownIndicator") + 1], "AffectedStreets")
+        app = self.app()
+        self.fill(app)
+        self.assertFalse(any(w.key.endswith("_AffectedStreets") for w in app.text_input))
+        self.widget(app, "selectbox", "WaterShutdownIndicator").set_value("Avec arrêt d'eau 1 jour").run()
+        streets = self.widget(app, "text_input", "AffectedStreets")
+        self.assertEqual(streets.label, "Rues concernées par l'arrêt d'eau")
+        streets.set_value("Rue des Écoles").run()
+        for hidden in ("Sans arrêt d'eau", "Autre"):
+            self.widget(app, "selectbox", "WaterShutdownIndicator").set_value(hidden).run()
+            self.assertFalse(any(w.key.endswith("_AffectedStreets") for w in app.text_input))
+        self.widget(app, "selectbox", "WaterShutdownIndicator").set_value("Avec arrêt d'eau 1/2 journée").run()
+        self.assertEqual(self.widget(app, "text_input", "AffectedStreets").value, "Rue des Écoles")
+        self.widget(app, "selectbox", "WaterShutdownIndicator").set_value("Sans arrêt d'eau").run()
+        next(b for b in app.button if b.label == "Créer la demande").click().run()
+        self.assertFalse(app.exception)
+        self.assertFalse(app.error)
+        self.assertEqual(data.load_store()["demandes"][0]["AffectedStreets"], "Rue des Écoles")
+
+    def test_numeric_fields_are_marked_required_and_empty_submission_rejected(self):
+        app = self.app()
+        self.fill(app)
+        for field in ("ReportedDiameter", "EstimatedWorkDays"):
+            self.assertTrue(self.widget(app, "number_input", field).label.endswith(" *"))
+        self.widget(app, "number_input", "ReportedDiameter").set_value(None)
+        next(b for b in app.button if b.label == "Créer la demande").click().run()
+        self.assertFalse(app.exception)
+        self.assertIn("obligatoire", app.error[0].value)
+        self.assertEqual(data.load_store()["demandes"], [])
+
     def app(self, original=None, mobile=True):
         app = AppTest.from_string(f'''
 import streamlit as st
@@ -209,7 +255,8 @@ if not st.session_state.get("forms_saved") and not st.session_state.get("dossier
         self.widget(app, "text_input", "address").set_value("1 rue Test")
         self.widget(app, "text_input", "city").set_value("Test")
         for field, value in valid_choices().items():
-            self.widget(app, "multiselect" if field in MULTIPLE_FIELDS else "selectbox", field).set_value(value)
+            kind = "number_input" if field in {"ReportedDiameter", "EstimatedWorkDays"} else "multiselect" if field in MULTIPLE_FIELDS else "selectbox"
+            self.widget(app, kind, field).set_value(value)
         app.run()
 
     def test_five_sections_lists_hidden_transport_and_identity(self):
@@ -327,7 +374,8 @@ record_dialog("demandes", None)
         app = self.app()
         with patch("components.address_fields._picker", return_value={"address": "Rue Test", "city": "Test", "latitude": 45.5, "longitude": 4.3}):
             for field, value in valid_choices().items():
-                self.widget(app, "multiselect" if field in MULTIPLE_FIELDS else "selectbox", field).set_value(value)
+                kind = "number_input" if field in {"ReportedDiameter", "EstimatedWorkDays"} else "multiselect" if field in MULTIPLE_FIELDS else "selectbox"
+                self.widget(app, kind, field).set_value(value)
             next(b for b in app.button if b.label == "Créer la demande").click().run()
         self.assertFalse(app.exception)
         self.assertFalse(app.error)

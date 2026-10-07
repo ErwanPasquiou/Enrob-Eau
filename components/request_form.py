@@ -9,12 +9,25 @@ from services.request_model import REQUEST_CHOICES, MULTIPLE_FIELDS, display_cho
 
 
 REQUEST_GROUPS = [
-    ("Localisation des travaux", "AffectedStreets"),
+    ("Localisation des travaux", ""),
     ("Informations sur la demande", "RequestDate RequesterReference CustomerName BusinessDomain LeakReportReference RequestReason MeterReference"),
     ("Caractéristiques des travaux", "ReportedMaterial ReportedDiameter ReportedRoadType ReportedSurfaceType EstimatedWorkDays"),
-    ("Contraintes et préparation du chantier", "DictAtuIndicator WaterShutdownIndicator RoadImpact SafetyInstructions SpecialConditions"),
+    ("Contraintes et préparation du chantier", "DictAtuIndicator WaterShutdownIndicator AffectedStreets RoadImpact SafetyInstructions SpecialConditions"),
     ("Commentaire complémentaire", "RequestComment"),
 ]
+
+
+def conditional_text(row, field, prefix, visible, label):
+    """Conserve la saisie lorsque Streamlit retire le widget masqué de la session."""
+    key = f"{prefix}_{field}"
+    memory = f"request_hidden_{prefix}_{field}"
+    st.session_state.setdefault(memory, row[field])
+    if visible:
+        row[field] = st.text_input(label, value=st.session_state[memory] or "", key=key)
+    else:
+        if key in st.session_state:
+            st.session_state[memory] = st.session_state[key]
+        row[field] = st.session_state[memory]
 
 
 def render_request_fields(row, prefix, *, mobile, creating):
@@ -54,6 +67,10 @@ def render_request_fields(row, prefix, *, mobile, creating):
                         if other_key in st.session_state:
                             st.session_state[other_memory] = st.session_state[other_key]
                         row["ReportedRoadTypeOther"] = st.session_state[other_memory]
+                elif field == "AffectedStreets":
+                    conditional_text(row, field, prefix,
+                                     row["WaterShutdownIndicator"] in {"Avec arrêt d'eau 1 jour", "Avec arrêt d'eau 1/2 journée"},
+                                     "Rues concernées par l'arrêt d'eau")
                 elif field == "MeterReference":
                     required = row["RequestReason"] == "Renouvellement de branchement"
                     row[field] = st.text_input(label, value=value or "", key=key,
@@ -68,7 +85,7 @@ def render_request_fields(row, prefix, *, mobile, creating):
                                              format="DD/MM/YYYY", key=key)
                     row[field] = selected.isoformat() if selected else None
                 elif field in {"ReportedDiameter", "EstimatedWorkDays"}:
-                    row[field] = st.number_input(label, min_value=0.0, value=float(value) if value is not None else None,
+                    row[field] = st.number_input(label + " *", min_value=0.0, value=float(value) if value is not None else None,
                                                  step=1.0, key=key, placeholder="Non renseigné")
                 elif field in {"RequestComment", "SafetyInstructions", "SpecialConditions"}:
                     row[field] = st.text_area(label, value=value or "", key=key, placeholder="Saisissez un commentaire…")

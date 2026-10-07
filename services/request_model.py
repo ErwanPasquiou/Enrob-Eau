@@ -72,6 +72,9 @@ def validate_request_choices(row):
         raise ValueError("Précisez le type de voirie lorsque « Autre » est sélectionné.")
     if row["RequestReason"] == "Renouvellement de branchement" and not (row.get("MeterReference") or "").strip():
         raise ValueError("Le champ « Matricule Compteur » est obligatoire pour un renouvellement de branchement.")
+    for field in ("ReportedDiameter", "EstimatedWorkDays"):
+        if row[field] is None or (isinstance(row[field], str) and not row[field].strip()):
+            raise ValueError(f"Le champ « {LABELS[field]} » est obligatoire.")
 
 
 def display_choices(value):

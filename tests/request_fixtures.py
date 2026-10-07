@@ -10,6 +10,7 @@ VALID_CHOICES = {
     "RequestReason": "Sondage", "BusinessDomain": "En domaine public : en agglomération",
     "ReportedMaterial": "Fonte", "ReportedRoadType": ["Chaussée"], "ReportedSurfaceType": ["Enrobé"],
     "RoadImpact": ["Aucun impact"], "DictAtuIndicator": "DICT", "WaterShutdownIndicator": "Sans arrêt d'eau",
+    "ReportedDiameter": 100, "EstimatedWorkDays": 2,
 }
 
 
