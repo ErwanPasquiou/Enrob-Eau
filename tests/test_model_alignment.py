@@ -13,6 +13,7 @@ from services.data_model import SCHEMAS
 from services.home_service import home_data
 from services.local_model_migration import adapt_store, migrate_local_data
 from services.refection_service import prestation_rows, filter_prestations
+from request_fixtures import valid_choices
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,7 +30,7 @@ class LocalDataCase(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
         request = edits.new_record("demandes")
-        request.update(RequestReason="Travaux", ReportedCity="Test", RequesterReference="agent@example.test",
+        request.update(valid_choices(), ReportedCity="Test", RequesterReference="agent@example.test",
                        LocationLandmark="45.5,4.3")
         self.request = edits.save_record("demandes", request)
 

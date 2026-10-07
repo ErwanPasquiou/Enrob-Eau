@@ -36,7 +36,8 @@ def adapt_store(source):
         raise ValueError("Modèles ancien et nouveau mélangés : vérifiez les fichiers avant migration.")
     data.validate_store(target)
     # L'ordre des colonnes suit le schéma ; aucune valeur métier n'est recalculée.
-    return {table: [{field: row[field] for field in SCHEMAS[table]} for row in rows]
+    # Les champs facultatifs ajoutés ultérieurement peuvent rester absents des anciens JSON.
+    return {table: [{field: row[field] for field in SCHEMAS[table] if field in row} for row in rows]
             for table, rows in target.items()}
 
 

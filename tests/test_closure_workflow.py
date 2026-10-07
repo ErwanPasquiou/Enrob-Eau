@@ -8,6 +8,7 @@ from unittest.mock import patch
 from streamlit.testing.v1 import AppTest
 from services import dossier_edit_service as edits
 from services.business_data_service import load_store
+from request_fixtures import valid_choices
 
 
 class ClosureWorkflowTests(unittest.TestCase):
@@ -21,7 +22,7 @@ class ClosureWorkflowTests(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
         row = edits.new_record("demandes")
-        row.update(RequestReason="Travaux", ReportedCity="Test", RequesterReference="agent@example.test")
+        row.update(valid_choices(), ReportedCity="Test", RequesterReference="agent@example.test")
         self.request = edits.save_record("demandes", row)
 
     def order(self, reference):
@@ -53,7 +54,7 @@ class ClosureWorkflowTests(unittest.TestCase):
 
     def test_saur_reference_required_unique_and_editable(self):
         row = edits.new_record("interventions", self.request)
-        self.assertTrue(row["WorkOrderReferenceEnrobEau"].startswith("WO-"))
+        self.assertTrue(row["WorkOrderReferenceEnrobEau"].startswith("INT-"))
         self.assertIsNone(row["WorkOrderReferenceSaur"])
         self.assertIsNone(row["IssuedAt"])
         with self.assertRaisesRegex(ValueError, "obligatoire"):

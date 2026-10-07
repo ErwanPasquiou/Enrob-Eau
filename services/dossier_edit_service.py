@@ -9,6 +9,7 @@ import tempfile
 from services import business_data_service as data
 from services.data_model import SCHEMAS, DATE_FIELDS, BOOL_FIELDS
 from services.reference_service import next_reference, validate_reference, advance_sequences
+from services.request_model import adapt_request, MULTIPLE_FIELDS, OPTIONAL_NEW_FIELDS, validate_request_choices
 
 LOCK = data.LOCK
 STATUSES = {
@@ -30,7 +31,8 @@ def new_record(table, parent=None):
     row[STATUS_FIELD[table]] = "À traiter" if table == "demandes" else "En cours"
     if table == "demandes":
         row["RequestDate"] = now[:10]
-        row["DictAtuIndicator"] = "NA"
+        for field in MULTIPLE_FIELDS:
+            row[field] = []
     elif table == "interventions":
         row["RequestReference"] = parent["RequestReference"]
     else:
@@ -40,7 +42,7 @@ def new_record(table, parent=None):
     return row
 
 
-def validate_record(table, row):
+def validate_record(table, row, *, request_choices=True):
     if set(row) != set(SCHEMAS[table]):
         raise ValueError("Les champs ne correspondent pas au modèle.")
     required = {"demandes": ["RequestReason", "ReportedCity", "RequestDate"],
@@ -62,8 +64,8 @@ def validate_record(table, row):
         if field in BOOL_FIELDS and value is not None and type(value) is not bool:
             raise ValueError(f"{field} : valeur booléenne attendue.")
     if table == "demandes":
-        if row["DictAtuIndicator"] not in {"DICT", "ATU", "NA"}:
-            raise ValueError("DICT / ATU : choisissez DICT, ATU ou NA.")
+        if request_choices:
+            validate_request_choices(row)
         if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", str(row["RequesterReference"] or "")):
             raise ValueError("Renseignez une adresse e-mail valide pour le demandeur.")
         for field in ("ReportedDiameter", "EstimatedWorkDays"):
@@ -89,12 +91,20 @@ def validate_record(table, row):
         raise ValueError("Les dates doivent respecter l'ordre des travaux.")
 
 
-def save_record(table, row, original=None, photos=(), actor="", owner_email=None):
+def save_record(table, row, original=None, photos=(), actor="", owner_email=None, *, _status_only=False):
     """Écrit une table ; refuse d'écraser une fiche modifiée depuis son ouverture."""
     with LOCK:
         store = data.load_store()
         before = deepcopy(store)
         row = deepcopy(row)
+        if table == "demandes":
+            if _status_only:
+                row = adapt_request(row)
+            original = adapt_request(original) if original is not None else None
+            for field in OPTIONAL_NEW_FIELDS:
+                row.setdefault(field, None)
+                if not _status_only and isinstance(row[field], str):
+                    row[field] = row[field].strip() or None
         pk = SCHEMAS[table][0]
         if table == "interventions":
             reference = row["WorkOrderReferenceSaur"]
@@ -134,6 +144,11 @@ def save_record(table, row, original=None, photos=(), actor="", owner_email=None
                 raise ValueError("Demande introuvable.")
             if original is None and request["RequestStatus"] in BLOCKED_REQUESTS:
                 raise ValueError("Reprenez le traitement de la demande avant de créer des travaux.")
+        if _status_only and (table != "demandes" or current is None or any(
+            row[field] != current[field] for field in SCHEMAS[table]
+            if field not in {"RequestStatus", "RequestComment"}
+        )):
+            raise ValueError("Une action de statut ne peut pas modifier les autres champs de la demande.")
         row["UpdatedAt"] = datetime.now().isoformat(timespec="microseconds")
         if table == "interventions":
             for field in ("IssuedAt", "ReceivedAt", "ClosedAt", "CityInformedAt", "CustomerInformedAt"):
@@ -145,7 +160,7 @@ def save_record(table, row, original=None, photos=(), actor="", owner_email=None
             for flag, field in (("HasConcrete2Cm", "Concrete2CmDate"), ("HasTemporaryRepair", "TemporaryRepairDate")):
                 if row[flag] is True:
                     row[field] = row["BackfillDate"]
-        validate_record(table, row)
+        validate_record(table, row, request_choices=not _status_only)
         records = store[table]
         if current is None:
             records.append(row)
@@ -203,7 +218,7 @@ def change_request_status(original, status, reason=""):
     stamp = datetime.now().strftime("%d/%m/%Y %H:%M")
     entry = f"[{stamp}] {status}" + (f" : {reason.strip()}" if reason.strip() else "")
     row["RequestComment"] = ((row["RequestComment"] or "") + "\n" + entry).strip()
-    return save_record("demandes", row, original)
+    return save_record("demandes", row, original, _status_only=True)
 
 
 def _write_table(table, records):

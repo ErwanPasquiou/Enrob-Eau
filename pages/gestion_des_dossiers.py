@@ -8,6 +8,7 @@ from components.page_content import create_page_content
 from components.styles import load_css
 from services.business_data_service import load_store, filter_store, related_records, table_frame, export_csv
 from services.data_model import SCHEMAS, LABELS, DATE_FIELDS
+from services.request_model import display_choices
 from components.dossier_forms import record_dialog, status_dialog, delete_dialog, create_service_dialog
 from components.photos import render_photos
 from services.dossier_edit_service import BLOCKED_REQUESTS
@@ -25,6 +26,7 @@ except (OSError, ValueError) as exc:
 
 
 def display_value(field, value):
+    value = display_choices(value)
     if value is None or value == "":
         return "Non renseigné"
     if isinstance(value, bool):

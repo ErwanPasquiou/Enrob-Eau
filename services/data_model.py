@@ -1,6 +1,6 @@
 """Modèle métier du diagramme Enrob'Eau (hors photos)."""
 SCHEMAS = {
-    "demandes": "RequestReference RequestDate RequesterReference ReportedAdress ReportedCity AffectedStreets LocationLandmark CustomerName BusinessDomain LeakReportReference RequestReason ReportedMaterial ReportedDiameter ReportedRoadType ReportedSurfaceType RoadImpact EstimatedWorkDays DictAtuIndicator WaterShutdownIndicator SafetyInstructions SpecialConditions RequestComment ImpactTransport RequestStatus CreatedAt UpdatedAt".split(),
+    "demandes": "RequestReference RequestDate RequesterReference ReportedAdress ReportedCity AffectedStreets LocationLandmark CustomerName BusinessDomain LeakReportReference RequestReason MeterReference ReportedMaterial ReportedDiameter ReportedRoadType ReportedRoadTypeOther ReportedSurfaceType RoadImpact EstimatedWorkDays DictAtuIndicator WaterShutdownIndicator SafetyInstructions SpecialConditions RequestComment ImpactTransport RequestStatus CreatedAt UpdatedAt".split(),
     "interventions": "WorkOrderReferenceEnrobEau WorkOrderReferenceSaur RequestReference IssuedAt ReceivedAt ClosedAt SaurComment CityWorksComment CityInformedAt CustomerWorksComment CustomerInformedAt WorkOrderStatus CreatedAt UpdatedAt".split(),
     "prestations": "ServiceReference WorkOrderReferenceEnrobEau ServiceCode WorkAddress WorkCity WorkCoordinates WorkReason SurfaceRepairType RoadType Comment ExcavationDate BackfillDate Concrete2CmDate HasConcrete2Cm TemporaryRepairDate HasTemporaryRepair FinalRepairDate ServiceStatus CreatedAt UpdatedAt".split(),
 }
@@ -11,6 +11,7 @@ LABELS = {
     "LocationLandmark": "Repère de localisation", "CustomerName": "Nom du client",
     "BusinessDomain": "Domaine d'activité", "LeakReportReference": "Référence de la fiche fuite",
     "RequestReason": "Motif de la demande", "ReportedMaterial": "Matériau signalé",
+    "MeterReference": "Matricule Compteur", "ReportedRoadTypeOther": "Précision du type de voirie",
     "ReportedDiameter": "Diamètre signalé", "ReportedRoadType": "Type de voirie signalé",
     "ReportedSurfaceType": "Revêtement signalé", "RoadImpact": "Impact sur la voirie",
     "EstimatedWorkDays": "Durée estimée des travaux (jours)", "DictAtuIndicator": "DICT / ATU",
@@ -33,4 +34,4 @@ LABELS = {
     "FinalRepairDate": "Date de réfection définitive", "ServiceStatus": "Statut de la prestation",
 }
 DATE_FIELDS = {field for fields in SCHEMAS.values() for field in fields if field.endswith("Date") or field.endswith("At")}
-BOOL_FIELDS = {"RoadImpact", "WaterShutdownIndicator", "ImpactTransport", "HasConcrete2Cm", "HasTemporaryRepair"}
+BOOL_FIELDS = {"ImpactTransport", "HasConcrete2Cm", "HasTemporaryRepair"}

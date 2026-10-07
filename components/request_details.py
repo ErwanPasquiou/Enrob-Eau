@@ -3,12 +3,15 @@ from datetime import datetime
 from html import escape
 import streamlit as st
 from services.data_model import SCHEMAS, LABELS, DATE_FIELDS
+from services.request_model import adapt_request, display_choices
 
 
 def render_request_details(row):
+    row = adapt_request(row)
     lines = []
     for field in SCHEMAS["demandes"]:
         value = row[field]
+        value = display_choices(value)
         if value is None or value == "":
             value = "Non renseigné"
         elif isinstance(value, bool):

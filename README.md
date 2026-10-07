@@ -57,6 +57,35 @@ Le formulaire de création s'affiche sur une colonne pour l'usage mobile. Demand
 
 Les demandes fournies avec le projet utilisent des e-mails fictifs : elles n'apparaîtront pas dans la page Demandes si elles n'appartiennent pas au compte connecté. Elles restent disponibles dans Gestion des dossiers.
 
+### Formulaire Demande — CODEX-003
+
+La création et la modification partagent un formulaire sur **une seule page**, organisé en cinq sections bordées :
+
+1. **Localisation des travaux** : recherche d'adresse ou saisie libre, commune, repères/GPS et rues concernées.
+2. **Informations sur la demande** : date, demandeur, client, domaine d'activité, fiche fuite, motif et Matricule Compteur.
+3. **Caractéristiques des travaux** : matériau, diamètre, types de voirie, revêtements et durée estimée.
+4. **Contraintes et préparation du chantier** : DICT / ATU, coupure d'eau, impacts sur la voirie, sécurité et conditions particulières.
+5. **Commentaire complémentaire** : commentaire de la demande.
+
+Les huit listes ci-dessous sont obligatoires à la création et à l'enregistrement du formulaire de modification. Aucun choix métier n'est présélectionné pour une nouvelle demande.
+
+| Champ | Sélection | Valeurs autorisées |
+| --- | --- | --- |
+| Type de voirie | Multiple | Pleine terre ; Chaussée ; Trottoir ; Autre |
+| DICT / ATU | Unique | ATU immédiate ; ATU 72h ; ATU sous 9 jours ; DICT ; Sans terrassement |
+| Revêtement | Multiple | Enrobé ; Asphalte <= 3m2 ; Asphalte > 3m2 ; Béton désactivé ; Béton (résine) perméable ; Pleine terre ; Pavé |
+| Motif de la demande | Unique | Création branchement neuf ; Réparation de fuite branchement ; Renouvellement de branchement ; Suppression de branchement ; Modification de branchement ; Intervention bouche à clés ; Renouvellement de regard ; Réparation fuite réseau distribution ; Sondage ; Pose d'une vanne réseau ; Réparation une vanne réseau ; Renouvellement vanne réseau ; Création PI ; Renouvellement PI ; Pose Borne Moneca |
+| Coupure d'eau | Unique | Avec arrêt d'eau 1 jour ; Avec arrêt d'eau 1/2 journée ; Sans arrêt d'eau ; Autre |
+| Matériau signalé | Unique | Fonte ; PVC ; PEHD ; PEBD ; Cuivre ; Acier - Fer - Galva ; Plomb ; Non détectable ; Autre |
+| Domaine d'activité | Unique | En domaine public : en agglomération ; En domaine public : Route métropolitaine ; En domaine privé nécessitant RDV |
+| Impact sur la voirie | Multiple | Route barrée et déviation ; Alternat par feu ; Réduction sur chaussée ; Pose de panneaux interdit de stationner ; Travaux sur trottoir ; Aucun impact ; Autre |
+
+Choisir **Autre** parmi les types de voirie affiche une précision obligatoire, stockée dans `ReportedRoadTypeOther`. Ce champ est facultatif lorsque ce choix est absent ; une précision déjà saisie est conservée. Aucun champ de précision supplémentaire n'est imposé aux autres listes contenant « Autre ».
+
+**Matricule Compteur** (`MeterReference`) est un texte nullable : une saisie vide ou composée d'espaces est enregistrée en `null`, et les zéros initiaux sont conservés. Il devient obligatoire uniquement pour le motif **Renouvellement de branchement**. Le formulaire indique cette obligation dès le changement du motif ; le service la contrôle à l'enregistrement.
+
+**Impact sur les transports** n'est plus proposé dans le formulaire. La colonne historique `ImpactTransport` reste conservée, consultable et exportable ; modifier les autres champs ne l'efface pas. Les listes et validations communes sont définies dans [services/request_model.py](services/request_model.py).
+
 ### Gérer les travaux
 
 Le modèle suit cette hiérarchie :
@@ -166,6 +195,8 @@ La page Export sélectionne les dossiers par recherche, commune, statut et péri
 
 Les exports produisent un CSV par table métier, avec les noms techniques des colonnes, un séparateur `;` et un encodage UTF-8 avec BOM pour Excel. L'aperçu est limité à 1 000 lignes par table, mais le téléchargement comprend toutes les lignes filtrées. Les textes susceptibles d'être interprétés comme des formules sont préfixés par une apostrophe dans le CSV, sans modifier les données sources. Les photos ne sont pas incluses dans les exports CSV.
 
+Les choix multiples d'une demande sont exportés sous forme de tableau JSON dans chaque cellule CSV, par exemple `["Chaussée", "Trottoir"]`, pour conserver toutes les valeurs sans ambiguïté. `MeterReference` et `ReportedRoadTypeOther` font partie des colonnes sélectionnables. Les fiches de consultation affichent les choix multiples séparés par des virgules. Le préremplissage d'une prestation les reprend également comme texte, sans changer le modèle de la prestation.
+
 ## Identification et droits
 
 [app.py](app.py) récupère l'e-mail transmis dans l'en-tête `X-Forwarded-Email`, puis recherche le compte dans la table d'administration. L'accès nécessite un compte actif avec l'un des profils suivants :
@@ -246,7 +277,7 @@ Les trois fichiers JSON de [data/exemples/](data/exemples/) contiennent les donn
 | [interventions.json](data/exemples/interventions.json) | WorkOrderEnrobEau | `WorkOrderReferenceEnrobEau` | `RequestReference` |
 | [prestations.json](data/exemples/prestations.json) | Service | `ServiceReference` | `WorkOrderReferenceEnrobEau` |
 
-`WorkOrderReferenceSaur` appartient uniquement aux interventions. Les écrans de prestations la retrouvent par jointure en mémoire ; elle n'est pas dupliquée dans `prestations.json` ni ajoutée au schéma CSV des prestations. Le modèle des trois tables locales suit les colonnes du schéma cible Enrob'Eau fourni pour CODEX-001. Les sources `datapf_prod_featured.core...` restent hors périmètre : aucune connexion ni synchronisation métier n'est implémentée.
+`WorkOrderReferenceSaur` appartient uniquement aux interventions. Les écrans de prestations la retrouvent par jointure en mémoire ; elle n'est pas dupliquée dans `prestations.json` ni ajoutée au schéma CSV des prestations. Le modèle local issu du schéma cible de CODEX-001 intègre les évolutions du formulaire Demande de CODEX-003 décrites ci-dessous. Les sources `datapf_prod_featured.core...` restent hors périmètre : aucune connexion ni synchronisation métier n'est implémentée.
 
 Le jeu d'exemple comprend 12 demandes et illustre des demandes sans intervention, plusieurs interventions pour une demande et plusieurs prestations pour une intervention. Les liens sont vérifiés au chargement. Les statuts présents dans les exemples illustrent le prototype ; les règles applicables sont décrites dans la section [Règles métier principales](#règles-métier-principales).
 
@@ -265,8 +296,20 @@ Chaque enregistrement contient les champs définis dans [services/data_model.py]
 | Booléens | `true` ou `false`. |
 | Adresse signalée | `ReportedAdress` conserve volontairement l'orthographe du modèle existant. |
 | Demandeur | `RequesterReference` contient l'e-mail du compte connecté à la création ; `RequestReference` identifie le dossier. |
-| DICT / ATU | `DictAtuIndicator` est une chaîne : `DICT`, `ATU` ou `NA`. |
+| Choix multiples de la Demande | `ReportedRoadType`, `ReportedSurfaceType`, `RoadImpact` : tableaux JSON de chaînes pour les nouveaux enregistrements. |
+| DICT / ATU et coupure d'eau | `DictAtuIndicator` et `WaterShutdownIndicator` : chaînes choisies dans les listes CODEX-003. |
+| Matricule Compteur et précision de voirie | `MeterReference` et `ReportedRoadTypeOther` : texte ou `null`. |
 | Coordonnées des prestations | `WorkCoordinates` contient une chaîne `latitude,longitude` dans les exemples. |
+
+### Compatibilité des anciennes demandes — CODEX-003
+
+Aucune migration destructive ni réécriture au chargement n'est nécessaire. Le lecteur complète en mémoire les champs `MeterReference` et `ReportedRoadTypeOther` absents avec `null`, et transforme les anciens textes de voirie/revêtement/impact en tableaux contenant le texte original, sans découpage ni interprétation métier.
+
+Les anciens booléens de `RoadImpact` et `WaterShutdownIndicator`, ainsi que les anciens libellés hors référentiel, restent lisibles et conservés. Par exemple, `Communale`, `Eau potable`, `ATU` ou une coupure d'eau à `true` ne permettent pas de déduire les nouveaux choix : aucune conversion métier automatique n'est appliquée. À l'édition, le formulaire affiche la valeur historique à requalifier et ne propose que les nouvelles listes ; l'utilisateur doit compléter les champs obligatoires avant d'enregistrer. Une ancienne demande sans compteur reste chargeable, même si son motif impose désormais ce champ à l'enregistrement du formulaire.
+
+Les données d'exemple historiques sont conservées sur disque pour illustrer cette compatibilité. Lors d'une écriture de `demandes.json`, les champs complétés en mémoire et les tableaux sont sérialisés avec la table ; les anciennes valeurs des autres demandes restent conservées, avec leurs références, dates, statuts et liens. Les interventions et les photos ne sont pas migrées par CODEX-003. Le changement de statut seul reste utilisable sur les anciennes demandes : il ne permet de modifier que le statut et son commentaire, sans contourner les validations d'un formulaire complet.
+
+Après déploiement, rouvrir les formulaires des sessions déjà actives. Les copies locales restent à sauvegarder selon les limites de persistance du prototype.
 
 ### Écritures et concurrence
 
@@ -342,6 +385,8 @@ Modif.md                       Notes de modifications demandées
 Points d'entrée utiles pour la maintenance :
 
 - [services/data_model.py](services/data_model.py) : colonnes métier, libellés et types de champs.
+- [services/request_model.py](services/request_model.py) : listes CODEX-003, adaptation à la lecture et validations de la Demande.
+- [components/request_form.py](components/request_form.py) : les cinq sections du formulaire et ses champs conditionnels.
 - [services/business_data_service.py](services/business_data_service.py) : chargement des JSON, liens, filtres et exports.
 - [services/dossier_edit_service.py](services/dossier_edit_service.py) : création, validation, modification et suppression des fiches.
 - [services/local_model_migration.py](services/local_model_migration.py) : vérification, sauvegarde et migration explicite des anciens JSON pour CODEX-001.
@@ -361,6 +406,8 @@ Depuis la racine, avec les dépendances installées :
 La suite couvre notamment les filtres, les exports, les relations entre fiches, les validations de dates, les modifications concurrentes, la page Demandes, les opérations photos, le chargement des images à la demande et le CRUD de l'administration en mode dégradé. Les tests CODEX-001 vérifient également la migration, l'unicité et la modification de la référence SI SAUR, la stabilité des rattachements et le parcours unique de création des prestations.
 
 Les tests de photos génèrent leurs images en mémoire et utilisent des dossiers temporaires. Ils ne déposent pas d'images d'exemple dans l'application. Les tests d'interface utilisent `streamlit.testing.v1.AppTest` ; ils ne remplacent pas une vérification du rendu et de la caméra sur un navigateur réel.
+
+Les tests CODEX-003 couvrent les listes et obligations, la précision « Autre », le compteur conditionnel, la persistance des choix multiples, la lecture des anciens JSON, les exports, les liens et photos, la concurrence, les cinq sections, le géocodage simulé et la conservation des saisies au retour de l'éditeur photo. Les tests de widgets créant des brouillons utilisent un stockage temporaire pour ne pas consommer les compteurs du projet.
 
 ## Limites et points de vigilance
 

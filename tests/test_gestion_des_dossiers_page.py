@@ -1,9 +1,13 @@
 from pathlib import Path
 import unittest
 from streamlit.testing.v1 import AppTest
+from request_fixtures import isolate_local_data
 
 
 class BusinessPagesTests(unittest.TestCase):
+    def setUp(self):
+        isolate_local_data(self)
+
     def test_service_dates_react_to_choices(self):
         from datetime import date
         app = AppTest.from_string('''
@@ -47,9 +51,9 @@ render_record_form("prestations", "REQ-test", parent={"WorkOrderReferenceEnrobEa
     def test_dossier_fields_and_selection(self):
         app = self.create_app("gestion_des_dossiers.py")
         self.assertEqual(len(app.exception), 0)
-        app.button(key="gd_select_REQ-011").click().run(timeout=30)
+        app.button(key="gd_select_DEM-000011").click().run(timeout=30)
         self.assertEqual(len(app.exception), 0)
-        self.assertEqual(app.session_state["dossier_selected"], "REQ-011")
+        self.assertEqual(app.session_state["dossier_selected"], "DEM-000011")
 
     def test_expand_and_restore_dossier(self):
         app = self.create_app("gestion_des_dossiers.py")

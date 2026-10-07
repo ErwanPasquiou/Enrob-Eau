@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
+from services.request_model import adapt_request
 
 
 class DossierPeriodTests(unittest.TestCase):
@@ -14,6 +15,7 @@ class DossierPeriodTests(unittest.TestCase):
             table: json.loads((root / "data/exemples" / f"{table}.json").read_text(encoding="utf-8-sig"))
             for table in ("demandes", "interventions", "prestations")
         }
+        store["demandes"] = [adapt_request(row) for row in store["demandes"]]
         # Exercise the page without writing local data or opening the photo database.
         self.enterContext(patch("services.business_data_service.load_store", return_value=store))
         self.enterContext(patch("components.photos.render_photos"))

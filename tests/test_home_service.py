@@ -20,8 +20,9 @@ class HomeDataTests(unittest.TestCase):
             "demandes-attente": 4, "interventions-cours": 5,
             "prestations-cours": 5, "prestations-refection": 5,
         })
-        self.assertEqual(locations["Référence"].nunique(), 4)
-        self.assertEqual(len(locations), 4)
+        # Les cinq interventions actives des exemples ont désormais une prestation géolocalisée.
+        self.assertEqual(locations["Référence"].nunique(), 5)
+        self.assertEqual(len(locations), 5)
         self.assertTrue(set(locations["Référence"]) <= set(data["interventions-cours"]["Référence"]))
 
     def test_changes_in_files_drive_categories(self):

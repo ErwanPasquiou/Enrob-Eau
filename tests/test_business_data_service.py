@@ -21,13 +21,13 @@ class BusinessDataTests(unittest.TestCase):
 
     def test_global_filters_propagate_to_children(self):
         filtered = filter_store(self.store, cities=["Saint-Chamond"], period=(date(2026, 9, 1), date(2026, 9, 1)))
-        self.assertEqual([r["RequestReference"] for r in filtered["demandes"]], ["REQ-001"])
+        self.assertEqual([r["RequestReference"] for r in filtered["demandes"]], ["DEM-000001"])
         self.assertEqual(len(filtered["interventions"]), 2)
         self.assertEqual(len(filtered["prestations"]), 3)
-        self.assertEqual(filtered["prestations"], related_records(self.store, "REQ-001")["prestations"])
+        self.assertEqual(filtered["prestations"], related_records(self.store, "DEM-000001")["prestations"])
 
     def test_linked_search_selects_whole_dossier(self):
-        filtered = filter_store(self.store, query="SRV-1-1-2")
+        filtered = filter_store(self.store, query="PR-000002")
         self.assertEqual(len(filtered["demandes"]), 1)
         self.assertEqual(len(filtered["prestations"]), 3)
         self.assertFalse(filter_store(self.store, query="absent-999")["demandes"])

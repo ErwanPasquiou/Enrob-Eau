@@ -6,15 +6,12 @@ import streamlit as st
 from services.data_model import SCHEMAS, LABELS, DATE_FIELDS, BOOL_FIELDS
 from services.business_data_service import load_store
 from services.dossier_edit_service import new_record, save_record, change_request_status, delete_record, STATUSES
-from components.address_fields import address_fields
 from components.photos import photo_uploads, prepare_uploads, clear_uploads, refresh_uploads, render_upload_editor
+from components.request_form import render_request_fields, REQUEST_GROUPS
+from services.request_model import adapt_request, display_choices
 
 GROUPS = {
-    "demandes": [
-        ("Demande et localisation", "RequestDate RequesterReference RequestReason ReportedAdress ReportedCity AffectedStreets LocationLandmark CustomerName BusinessDomain LeakReportReference"),
-        ("Travaux et contraintes", "ReportedMaterial ReportedDiameter ReportedRoadType ReportedSurfaceType RoadImpact EstimatedWorkDays DictAtuIndicator WaterShutdownIndicator ImpactTransport SafetyInstructions SpecialConditions"),
-        ("Commentaire", "RequestComment"),
-    ],
+    "demandes": REQUEST_GROUPS,
     "interventions": [
         ("Intervention · référence SI SAUR", "WorkOrderReferenceSaur ClosedAt WorkOrderStatus SaurComment"),
         ("Suivi de la DICT / de l'ATU", "IssuedAt ReceivedAt"),
@@ -66,14 +63,16 @@ def render_record_form(table, request_ref, original=None, parent=None, request=N
             st.error(f"Impossible de préparer la fiche : {exc}")
             return
     row = deepcopy(original) if original is not None else deepcopy(st.session_state[draft_key])
+    if table == "demandes":
+        row = adapt_request(row)
     prefix = row[SCHEMAS[table][0]] or f"new_intervention_{request_ref or row.get('RequestReference')}"
     if table == "demandes" and original is None:
         row["RequesterReference"] = st.session_state.get("current_user", {}).get("email", "")
     if original is None and table == "prestations" and request:
         row.update(WorkAddress=request["ReportedAdress"], WorkCity=request["ReportedCity"],
                    WorkCoordinates=request.get("LocationLandmark"),
-                   WorkReason=request["RequestReason"], RoadType=request["ReportedRoadType"],
-                   SurfaceRepairType=request["ReportedSurfaceType"])
+                   WorkReason=request["RequestReason"], RoadType=display_choices(request["ReportedRoadType"]),
+                   SurfaceRepairType=display_choices(request["ReportedSurfaceType"]))
     values_key = f"record_values_{prefix}"
     row = deepcopy(st.session_state.get(values_key, row))
     photo_prefix = f"{prefix}_new_photos"
@@ -98,17 +97,14 @@ def render_record_form(table, request_ref, original=None, parent=None, request=N
         if order:
             st.info(f"{LABELS['WorkOrderReferenceSaur']} : {order['WorkOrderReferenceSaur']}")
     selected_address = None
-    if table == "demandes":
-        st.markdown("**Localisation**")
-        selected_address = address_fields(row, prefix)
-        if selected_address:
-            row.update(selected_address)
     uploads = []
     if original is None and table in {"demandes", "prestations"}:
         st.markdown("**Photos (facultatif)**")
         uploads = photo_uploads(photo_prefix, in_dialog=in_dialog)
     with st.container():
-        for title, fields in GROUPS[table]:
+        if table == "demandes":
+            selected_address = render_request_fields(row, prefix, mobile=mobile, creating=original is None)
+        for title, fields in (GROUPS[table] if table != "demandes" else []):
             st.markdown(f"**{title}**")
             left, right = tuple(st.columns(2)) if not mobile else (st.container(), None)
             if mobile:
@@ -127,9 +123,6 @@ def render_record_form(table, request_ref, original=None, parent=None, request=N
                     elif field == "RequesterReference":
                         row[field] = st.text_input(label, value=value or "", key=f"{prefix}_{field}",
                                                    disabled=mobile or (original is None and bool(value)), placeholder="prenom.nom@entreprise.fr")
-                    elif field == "DictAtuIndicator":
-                        options = ["DICT", "ATU", "NA"]
-                        row[field] = st.selectbox(label, options, index=options.index(value) if value in options else 2, key=f"{prefix}_{field}")
                     elif field in STATUSES:
                         options = [v for v in STATUSES[field] if field != "WorkOrderStatus" or v != "Clôturée"]
                         if field == "WorkOrderStatus" and value == "Clôturée":
@@ -168,9 +161,12 @@ def render_record_form(table, request_ref, original=None, parent=None, request=N
         cancel = cancel_button("Annuler", use_container_width=True)
     if in_dialog and st.session_state.get(f"{photo_prefix}_editor"):
         st.session_state[values_key] = deepcopy(row)
+        if table == "demandes":
+            st.session_state[f"request_other_{prefix}"] = row["ReportedRoadTypeOther"]
     refresh_uploads(photo_prefix, scope="fragment" if in_dialog else "app")
     if cancel:
         st.session_state.pop(values_key, None)
+        st.session_state.pop(f"request_other_{prefix}", None)
         if mobile:
             st.session_state.forms_new = False
             st.session_state.forms_edit = False
@@ -189,6 +185,7 @@ def render_record_form(table, request_ref, original=None, parent=None, request=N
         else:
             clear_uploads(f"{prefix}_new_photos")
             st.session_state.pop(values_key, None)
+            st.session_state.pop(f"request_other_{prefix}", None)
             st.session_state.pop(draft_key, None)
             if mobile:
                 st.session_state.forms_new = False

@@ -9,3 +9,6 @@ data/exemples/administration.sqlite3*
 data/exemples/backups/
 .databricks/
 .streamlit/secrets.toml
+CODEX-001 — Alignement du modèle local et simplification des parcours  .md
+CODEX-002 — Normalisation et incrémentation des références locales.md
+CODEX-003 — Évolution complète du formulaire Demande.md

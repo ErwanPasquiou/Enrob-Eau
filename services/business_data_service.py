@@ -6,6 +6,7 @@ from threading import RLock
 
 import pandas as pd
 from services.data_model import SCHEMAS, DATE_FIELDS, BOOL_FIELDS
+from services.request_model import adapt_request, OPTIONAL_NEW_FIELDS, validate_request_types
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "exemples"
 LOCK = RLock()
@@ -18,6 +19,7 @@ def load_store():
         store = {table: json.loads((DATA_DIR / f"{table}.json").read_text(encoding="utf-8-sig"))
                  for table in SCHEMAS}
         validate_store(store, normalized=True)
+        store["demandes"] = [adapt_request(row) for row in store["demandes"]]
         return store
 
 
@@ -32,8 +34,12 @@ def validate_store(store, normalized=False):
         for index, row in enumerate(rows, 1):
             if isinstance(row, dict) and "WorkOrderReference" in row:
                 raise ValueError("Ancien modèle local détecté. Exécutez la migration CODEX-001 avant de continuer (voir README).")
-            if not isinstance(row, dict) or set(row) != set(columns):
+            missing = set(columns) - set(row) if isinstance(row, dict) else set(columns)
+            optional = OPTIONAL_NEW_FIELDS if table == "demandes" else set()
+            if not isinstance(row, dict) or set(row) - set(columns) or missing - optional:
                 raise ValueError(f"{table}, ligne {index} : colonnes différentes du modèle.")
+            if table == "demandes":
+                validate_request_types(row)
             key = row[columns[0]]
             if not isinstance(key, str) or not key.strip() or key in seen:
                 raise ValueError(f"{table}, ligne {index} : référence vide ou dupliquée.")
@@ -49,8 +55,6 @@ def validate_store(store, normalized=False):
                     raise ValueError(f"Intervention {key} : référence SI SAUR dupliquée : {reference}.")
                 saur_references.add(reference.strip())
             for field, value in row.items():
-                if field == "DictAtuIndicator" and value not in {"DICT", "ATU", "NA"}:
-                    raise ValueError(f"{table}, ligne {index} : DICT / ATU doit valoir DICT, ATU ou NA.")
                 if field in DATE_FIELDS and value is not None:
                     try:
                         datetime.fromisoformat(value)
@@ -103,6 +107,8 @@ def table_frame(store, table, columns=None):
 
 def export_csv(frame):
     def safe_cell(value):
+        if isinstance(value, list):
+            return json.dumps(value, ensure_ascii=False)
         if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")):
             return "'" + value
         return value

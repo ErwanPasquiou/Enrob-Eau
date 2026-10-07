@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from services.business_data_service import load_store
 from services.dossier_edit_service import new_record, save_record, change_request_status, delete_record
+from request_fixtures import valid_choices
 
 
 class DossierEditTests(unittest.TestCase):
@@ -35,7 +36,7 @@ class DossierEditTests(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def test_delete_service_then_childless_order(self):
-        order = next(r for r in self.source["interventions"] if r["WorkOrderReferenceEnrobEau"] == "WO-1-1")
+        order = next(r for r in self.source["interventions"] if r["WorkOrderReferenceEnrobEau"] == "INT-000001")
         with self.assertRaisesRegex(ValueError, "possède des prestations"):
             delete_record("interventions", order)
         children = [r for r in load_store()["prestations"] if r["WorkOrderReferenceEnrobEau"] == order["WorkOrderReferenceEnrobEau"]]
@@ -44,10 +45,10 @@ class DossierEditTests(unittest.TestCase):
         latest_order = next(r for r in load_store()["interventions"] if r["WorkOrderReferenceEnrobEau"] == order["WorkOrderReferenceEnrobEau"])
         delete_record("interventions", latest_order)
         self.assertNotIn(order, load_store()["interventions"])
-        self.assertTrue(any(r["WorkOrderReferenceEnrobEau"] == "WO-1-2" for r in load_store()["interventions"]))
+        self.assertTrue(any(r["WorkOrderReferenceEnrobEau"] == "INT-000002" for r in load_store()["interventions"]))
 
     def test_delete_checks_latest_children_and_stale_rows(self):
-        order = next(r for r in self.source["interventions"] if r["WorkOrderReferenceEnrobEau"] == "WO-4-1")
+        order = next(r for r in self.source["interventions"] if r["WorkOrderReferenceEnrobEau"] == "INT-000004")
         child = new_record("prestations", order)
         child.update(WorkReason="Test", WorkCity="Saint-Héand")
         save_record("prestations", child)
@@ -58,8 +59,8 @@ class DossierEditTests(unittest.TestCase):
 
     def test_request_email_and_dict_options(self):
         request = new_record("demandes")
-        request.update(RequestReason="Fuite", ReportedCity="Saint-Héand", RequesterReference="agent@example.test")
-        self.assertEqual(request["DictAtuIndicator"], "NA")
+        self.assertIsNone(request["DictAtuIndicator"])
+        request.update(valid_choices(), ReportedCity="Saint-Héand", RequesterReference="agent@example.test")
         saved = save_record("demandes", request)
         with self.assertRaisesRegex(ValueError, "DICT"):
             save_record("demandes", dict(saved, DictAtuIndicator=True), saved)
@@ -90,7 +91,7 @@ class DossierEditTests(unittest.TestCase):
 
     def test_stale_edit_does_not_overwrite_saved_change(self):
         original = self.source["demandes"][0]
-        first = dict(original, CustomerName="Premier changement")
+        first = dict(original, **valid_choices(), CustomerName="Premier changement")
         save_record("demandes", first, original)
         with self.assertRaisesRegex(ValueError, "a changé"):
             save_record("demandes", dict(original, CustomerName="Écrasement"), original)

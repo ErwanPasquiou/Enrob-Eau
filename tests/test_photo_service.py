@@ -12,6 +12,8 @@ from streamlit.testing.v1 import AppTest
 from services import photo_service as photos
 from services.business_data_service import load_store
 from services.dossier_edit_service import new_record, save_record, delete_record
+from request_fixtures import valid_choices
+from services.request_model import MULTIPLE_FIELDS
 
 
 def image_bytes(color="red"):
@@ -86,7 +88,7 @@ class PhotoTests(unittest.TestCase):
             photos.add_photos("demandes", self.ref, [self.photo, invalid], self.email)
         self.assertEqual(photos.list_photos("demandes", self.ref), [])
         row = new_record("demandes")
-        row.update(RequestReason="Test", ReportedCity="Test", RequesterReference=self.email)
+        row.update(valid_choices(), ReportedCity="Test", RequesterReference=self.email)
         with patch.object(photos, "add_photos", side_effect=OSError("Test")):
             with self.assertRaises(OSError):
                 save_record("demandes", row, photos=[self.photo], actor=self.email)
@@ -179,8 +181,8 @@ class PhotoTests(unittest.TestCase):
         app = AppTest.from_string('from components.dossier_forms import render_record_form\nrender_record_form("demandes", None, mobile=True)')
         app.session_state["current_user"] = {"actif": True, "email": self.email}
         app.run(timeout=30)
-        field = next(w for w in app.text_input if w.key.endswith("_RequestReason"))
-        field.set_value("Conserver ce motif").run()
+        field = next(w for w in app.selectbox if w.key.endswith("_RequestReason"))
+        field.set_value("Sondage").run()
         self.assertFalse(any(w.label == "Source des photos" for w in app.radio))
         next(b for b in app.button if b.label == "Ajouter une photo").click().run()
         self.assertEqual(len(app.exception), 0)
@@ -190,7 +192,7 @@ class PhotoTests(unittest.TestCase):
         with patch("streamlit.camera_input", side_effect=[upload, None]):
             app.run(timeout=30)
         self.assertEqual(len(app.exception), 0)
-        self.assertEqual(next(w for w in app.text_input if w.key.endswith("_RequestReason")).value, "Conserver ce motif")
+        self.assertEqual(next(w for w in app.selectbox if w.key.endswith("_RequestReason")).value, "Sondage")
 
     def test_photo_controls_are_hidden_until_popup_opened(self):
         app = AppTest.from_string('from components.photos import photo_uploads\nphoto_uploads("popup_test")')
@@ -241,10 +243,13 @@ record_dialog("prestations", "REQ-test", parent={"WorkOrderReferenceEnrobEau": "
             app.run(timeout=30)
             app.button(key=f"forms_view_{self.ref}").click().run(timeout=30)
             app.button(key="forms_modify").click().run(timeout=30)
-            app.text_input(key=f"{self.ref}_RequestReason").set_value("Motif modifié")
+            for field, value in valid_choices().items():
+                widgets = app.multiselect if field in MULTIPLE_FIELDS else app.selectbox
+                widgets(key=f"{self.ref}_{field}").set_value(value)
             next(b for b in app.button if b.label == "Enregistrer les modifications").click().run(timeout=30)
         self.assertEqual(len(app.exception), 0)
-        self.assertEqual(next(r for r in load_store()["demandes"] if r["RequestReference"] == self.ref)["RequestReason"], "Motif modifié")
+        self.assertFalse(app.error)
+        self.assertEqual(next(r for r in load_store()["demandes"] if r["RequestReference"] == self.ref)["RequestReason"], "Sondage")
 
     def test_refection_page_filters_opens_correct_record_and_keeps_request_photos_read_only(self):
         from services.refection_service import prestation_rows

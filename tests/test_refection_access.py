@@ -6,11 +6,15 @@ from streamlit.testing.v1 import AppTest
 from services.access_service import PAGES, PROFILS, can_access, default_page, page_href
 from services.business_data_service import load_store
 from services.refection_service import prestation_rows, filter_prestations
+from request_fixtures import isolate_local_data
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class RefectionAccessTests(unittest.TestCase):
+    def setUp(self):
+        isolate_local_data(self)
+
     def test_permissions_and_default_routes(self):
         expected = {
             "agent": {"accueil", "forms", "refection", "dossiers", "export"},
