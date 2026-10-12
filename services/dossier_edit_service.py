@@ -13,7 +13,7 @@ from services.request_model import adapt_request, MULTIPLE_FIELDS, OPTIONAL_NEW_
 
 LOCK = data.LOCK
 STATUSES = {
-    "RequestStatus": ["À traiter", "En cours", "En attente", "Refusée", "Clôturée"],
+    "RequestStatus": ["À traiter", "En cours", "En attente", "Refusée", "Clôturée", "Migration"],
     "WorkOrderStatus": ["À planifier", "En cours", "En attente", "Clôturée"],
     "ServiceStatus": ["À planifier", "En cours", "En attente", "Terminée"],
 }

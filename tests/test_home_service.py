@@ -1,9 +1,13 @@
 import unittest
 from services.business_data_service import load_store
 from services.home_service import home_data, coordinates
+from request_fixtures import isolate_local_data
 
 
 class HomeDataTests(unittest.TestCase):
+    def setUp(self):
+        isolate_local_data(self)
+
     def test_map_uses_request_coordinates_without_service(self):
         store = load_store()
         order = next(r for r in store["interventions"] if r["WorkOrderStatus"] == "En cours")

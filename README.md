@@ -314,6 +314,72 @@ Le fichier [manifest.yaml](manifest.yaml) contient encore les métadonnées du m
 
 ## Données et stockage
 
+### Import de Demande.xlsx et travaux d’exemple
+
+Le classeur [Demande.xlsx](data/exemples/Demande.xlsx), feuille `Demande`, contient **4 294 demandes**, **32 communes**, des références comprises entre `DEM-000004` et `DEM-004300` (avec des trous) et des dates renseignées du **17/01/2023 au 09/10/2026**. Les **894 demandes sans date** restent sans date. Toutes les lignes du classeur portent le statut historique **Migration** ; dans les JSON, les demandes avec travaux fictifs prennent le statut correspondant à leur scénario. Les autres conservent Migration, reconnu par les validations et le reporting. Les nouveaux formulaires continuent de créer des demandes au statut À traiter.
+
+**Jeu actif depuis le 12/10/2026 : 4 294 demandes, 3 295 interventions et 3 767 prestations, sans photos.** Les nouvelles interventions concernent **3 060 demandes** ; **1 234 demandes** restent sans intervention, dont les 894 sans date. L’ancien jeu et sa base photos sont archivés dans `data/exemples/backups/avant-travaux-20261012-170056/`. La préparation précédente est conservée dans `data/exemples/backups/Demande-xlsx-20261012-164940/`. Les anciennes références désignent des dossiers différents dans le classeur ; aucune ancienne intervention ni photo n’a été réaffectée aux nouvelles demandes.
+
+Les compteurs sont **4 300 / 3 304 / 3 778** : les prochaines références seront `DEM-004301`, `INT-003305` et `PR-003779`. Les interventions commencent à `INT-000010` et les prestations à `PR-000012`, au-delà des anciens compteurs. Le classeur d’origine est conservé intact comme source d’import ; l’application continue à lire et écrire les JSON. Une modification du classeur ne réimporte pas automatiquement ses lignes et ne remplace pas les modifications effectuées dans l’application. La base photos vide sera créée à la demande par l’application.
+
+#### Génération des interventions et prestations
+
+Le script [scripts/prepare_travaux_exemple.ps1](scripts/prepare_travaux_exemple.ps1) produit les trois JSON et les séquences dans un **nouveau dossier**, sans modifier la base active. Il refuse un dossier de sortie existant. Après la conversion du classeur :
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare_travaux_exemple.ps1 -RequestsPath "$env:TEMP\demandes-a-importer.json" -OutputDirectory "$env:TEMP\travaux-exemple" -AsOf 2026-10-12 -OrderSequence 9 -ServiceSequence 11
+```
+
+Pour une autre base, fournir des compteurs de départ au moins égaux aux compteurs existants. Le dossier de sortie contient aussi `generation.json` avec les volumes, la date de référence et l’empreinte SHA-256 du JSON source. Arrêter l’application avant toute installation manuelle des quatre JSON ; archiver préalablement l’ensemble des données et la base photos afin de ne pas rattacher d’anciennes photos aux nouvelles demandes.
+
+| Règle | Données produites |
+| --- | --- |
+| Éligibilité | Date, commune et motif requis ; aucune date de demande inventée, aucune intervention pour une demande future. |
+| Scénarios | Dernier chiffre de la référence : 0 sans travaux, 1 à planifier, 2 terrassement en cours, 3 réfection provisoire, 4 attente de réfection définitive, 5 à 9 travaux terminés si leur ancienneté le permet. |
+| Chronologie fictive | Informations commune/abonnés à J+2, terrassement à J+4, remblaiement/béton/provisoire à J+6, définitif à J+12 à J+35 (`12 + numéro de demande modulo 24`). Une demande trop récente reste à une étape compatible avec le 12/10/2026. Les valeurs ne prédisent pas des délais réels. |
+| DICT / ATU | Émission à J+1 et réception à J+2 pour les demandes indiquant DICT ou ATU, après le stade à planifier. Ce sont des dates simulées, sans interprétation réglementaire. |
+| Sans terrassement | Aucun terrassement, remblaiement, béton ou provisoire renseigné ; code `DEMO-SANS-TERRASSEMENT`. Les autres prestations ont le code fictif `DEMO-REFECTION`. |
+| Relations | Une intervention par demande éligible, deux si son numéro est divisible par 13. Une prestation par intervention, deux si le numéro de demande est divisible par 7 ; commentaires distinguant les lots/zones simulés. |
+| Lieu et motif | Adresse, commune et motif repris du parent ; voirie et revêtement repris des listes source. Seuls les repères GPS interprétables sont copiés, sans géocodage inventé. |
+| Statuts | Intervention clôturée seulement avec toutes ses prestations terminées ; date de clôture égale à leur date définitive. Demande clôturée seulement lorsque toutes ses interventions le sont. Les autres demandes avec travaux sont En cours ou En attente. |
+| Traçabilité | Références SAUR fictives `DEMO-SAUR-…`, commentaires explicites « DONNEES FICTIVES », horodatages techniques au 12/10/2026 à 12 h. Les dates métier historiques décrivent le scénario ; les autres valeurs de demande sont conservées. |
+| Photos | Aucune photo générée ni ancienne photo rattachée. Les originaux restent dans la sauvegarde. |
+
+| État | Interventions | Prestations |
+| --- | ---: | ---: |
+| À planifier | 372 | 426 |
+| En cours | 779 | 889 |
+| En attente | 365 | 417 |
+| Clôturée / Terminée | 1 779 | 2 035 |
+
+Les KPI et graphiques utilisent ces JSON par les jointures et formules documentées dans la section Reporting. Leurs résultats représentent ce scénario de démonstration. Les lacunes et valeurs historiques du classeur restent visibles dans le KPI de conformité.
+
+#### Conversion et conservation des données
+
+Le convertisseur [scripts/prepare_demandes.ps1](scripts/prepare_demandes.ps1) lit uniquement les valeurs enregistrées dans le classeur, sans exécuter ses connexions externes. Il produit un nouveau JSON et refuse d’écraser un fichier existant. Depuis la racine du projet sous Windows :
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/prepare_demandes.ps1 -OutputPath "$env:TEMP\demandes-a-importer.json"
+```
+
+`-ExecutionPolicy Bypass` ne s’applique qu’au processus de conversion. Aucune bibliothèque Python ou dépendance Excel supplémentaire n’est requise pour générer le JSON, ensuite utilisable sous Windows ou Databricks.
+
+| Source Excel | Traitement |
+| --- | --- |
+| `RequestReference` | Référence conservée sans renumérotation ; contrôle du format et des doublons. |
+| `RequestDate` | Conversion du texte ISO horodaté en `AAAA-MM-JJ` ; date absente conservée à `null`. Aucun recours automatique à `CreatedAt`. |
+| `CreatedAt`, `UpdatedAt` | Horodatages d’origine conservés. |
+| `ReportedRoadType`, `ReportedSurfaceType`, `RoadImpact` | Textes JSON convertis en vrais tableaux de chaînes ; les tableaux vides restent vides et les libellés historiques sont conservés. |
+| `ReportedDiameter`, `EstimatedWorkDays` | Valeurs numériques converties en nombres. Les **534 diamètres textuels non vides** deviennent `null` avec conservation exacte du texte dans `RequestComment`, sous un libellé d’import ; deux diamètres blancs deviennent `null`. Les 376 durées absentes restent `null`. |
+| `ImpactTransport1` | Renommé en `ImpactTransport`, avec conservation du booléen. |
+| `WaterShutdownIndicatorOther` | Les **78 précisions renseignées** sont ajoutées au commentaire avec le nom du champ source, sans écraser le commentaire initial. |
+| `RoadImpactOther` | Même règle de conservation dans le commentaire ; aucune valeur renseignée dans ce classeur. |
+| Autres champs | Conservation des textes, e-mails, communes et valeurs métier ; champs vides à `null`. Aucune qualification métier automatique. |
+
+Les contrôles CODEX-003 s’appliquent à l’enregistrement ultérieur des formulaires. Les valeurs historiques incomplètes restent consultables ; une édition demande de compléter les champs requis. Le reporting signale les demandes sans date exclues de la période, affiche le statut Migration et contrôle la conformité des données. Ses listes sont paginées par 50 dossiers et la lecture des métadonnées photos est groupée pour supporter le volume importé.
+
+Les anciennes petites données de démonstration restent utilisées uniquement comme **fixtures de tests** dans `tests/fixtures/`. Elles permettent de tester les relations et parcours avec interventions et prestations indépendamment du nouveau jeu utilisateur.
+
 ### Fichiers métier et relations
 
 Les trois fichiers JSON de [data/exemples/](data/exemples/) contiennent les données métier du prototype :
@@ -326,7 +392,7 @@ Les trois fichiers JSON de [data/exemples/](data/exemples/) contiennent les donn
 
 `WorkOrderReferenceSaur` appartient uniquement aux interventions. Les écrans de prestations la retrouvent par jointure en mémoire ; elle n'est pas dupliquée dans `prestations.json` ni ajoutée au schéma CSV des prestations. Le modèle local issu du schéma cible de CODEX-001 intègre les évolutions du formulaire Demande de CODEX-003 décrites ci-dessous. Les sources `datapf_prod_featured.core...` restent hors périmètre : aucune connexion ni synchronisation métier n'est implémentée.
 
-Le jeu d'exemple comprend 12 demandes et illustre des demandes sans intervention, plusieurs interventions pour une demande et plusieurs prestations pour une intervention. Les liens sont vérifiés au chargement. Les statuts présents dans les exemples illustrent le prototype ; les règles applicables sont décrites dans la section [Règles métier principales](#règles-métier-principales).
+Le jeu d'exemple comprend 4 294 demandes, 3 295 interventions et 3 767 prestations. Il illustre des demandes sans intervention, plusieurs interventions pour une demande et plusieurs prestations pour une intervention. Les liens sont vérifiés au chargement. Les statuts présents dans les exemples illustrent le prototype ; les règles applicables sont décrites dans la section [Règles métier principales](#règles-métier-principales).
 
 Le chargement général couvre uniquement ces trois tables. Les photos sont lues séparément à la demande et l'entité `Permit` n'est pas chargée. Les dossiers et les exports n'utilisent aucune connexion Databricks. Les comptes suivent le fonctionnement décrit dans [Identification et droits](#identification-et-droits).
 
@@ -366,7 +432,7 @@ Les écritures remplacent atomiquement le fichier de la table concernée. Une mo
 
 ### Migration des anciens JSON — CODEX-001
 
-Les fichiers d'exemple livrés sont déjà au nouveau modèle : 12 demandes, 9 interventions et 9 prestations. La procédure ci-dessous concerne les autres copies locales encore basées sur l'ancien modèle.
+Les fichiers d'exemple livrés sont déjà au nouveau modèle. L'ancien petit jeu de 12 demandes, 9 interventions et 9 prestations est conservé dans les fixtures de tests ; le jeu actif provient désormais de Demande.xlsx et de la génération des travaux. La procédure ci-dessous concerne les autres copies locales encore basées sur l'ancien modèle.
 
 Le chargement refuse les anciens fichiers contenant `WorkOrderReference` avec un message indiquant la migration à effectuer. Il ne réécrit pas les données implicitement. L'outil [services/local_model_migration.py](services/local_model_migration.py) vérifie les trois tables avant toute écriture et refuse les clés vides ou dupliquées, les parents inexistants, les colonnes inattendues et les mélanges de versions.
 
@@ -426,7 +492,6 @@ data/exemples/                 Données métier JSON et bases SQLite générées
 data/photos.sql                Schéma des deux tables photos SQLite
 README.md                      Documentation de l'application et de ses données
 tests/                        Tests métier et interactions Streamlit
-Modif.md                       Notes de modifications demandées
 ```
 
 Points d'entrée utiles pour la maintenance :

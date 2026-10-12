@@ -5,10 +5,12 @@ from datetime import date
 
 from services.business_data_service import load_store, filter_store, related_records, table_frame, export_csv
 from services.data_model import SCHEMAS
+from request_fixtures import isolate_local_data
 
 
 class BusinessDataTests(unittest.TestCase):
     def setUp(self):
+        isolate_local_data(self)
         self.store = load_store()
 
     def test_files_match_model_and_load_independently(self):

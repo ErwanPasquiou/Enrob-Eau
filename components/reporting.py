@@ -155,6 +155,17 @@ def render_map(data):
     st.caption(f'{data["missing_locations"]} dossier(s) sans coordonnées. Les points superposés sont regroupés.')
 
 
+def render_followup(rows, key):
+    size = 50
+    pages = max(1, ceil(len(rows) / size))
+    if st.session_state.get(key, 1) > pages:
+        st.session_state[key] = 1
+    page = st.selectbox("Page des dossiers", range(1, pages + 1), key=key) if pages > 1 else 1
+    st.html(followup_html(rows[(page - 1) * size:page * size]))
+    if pages > 1:
+        st.caption(f"{len(rows)} dossiers · {size} par page")
+
+
 def followup_html(rows):
     if not rows:
         return '<div class="rp-empty">Aucun dossier pour cette sélection.</div>'

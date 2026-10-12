@@ -21,7 +21,7 @@ def valid_choices():
 def isolate_local_data(case):
     """Les tests de widgets ne doivent pas consommer les compteurs du projet."""
     from services import business_data_service as data
-    store = data.load_store()
+    store = load_fixture_store()
     folder = tempfile.TemporaryDirectory()
     case.addCleanup(folder.cleanup)
     root = Path(folder.name)
@@ -29,3 +29,10 @@ def isolate_local_data(case):
         (root / f"{table}.json").write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
     case.enterContext(patch.object(data, "DATA_DIR", root))
     return root
+
+
+def load_fixture_store():
+    """Petit jeu stable de tests, indépendant des données importées par l'utilisateur."""
+    from services import business_data_service as data
+    with patch.object(data, "DATA_DIR", Path(__file__).resolve().parent / "fixtures"):
+        return data.load_store()

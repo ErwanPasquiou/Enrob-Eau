@@ -12,7 +12,7 @@ class DossierPeriodTests(unittest.TestCase):
     def setUp(self):
         root = Path(__file__).resolve().parents[1]
         store = {
-            table: json.loads((root / "data/exemples" / f"{table}.json").read_text(encoding="utf-8-sig"))
+            table: json.loads((root / "tests/fixtures" / f"{table}.json").read_text(encoding="utf-8-sig"))
             for table in ("demandes", "interventions", "prestations")
         }
         store["demandes"] = [adapt_request(row) for row in store["demandes"]]

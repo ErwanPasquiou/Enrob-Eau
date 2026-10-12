@@ -12,7 +12,7 @@ from streamlit.testing.v1 import AppTest
 from services import photo_service as photos
 from services.business_data_service import load_store
 from services.dossier_edit_service import new_record, save_record, delete_record
-from request_fixtures import valid_choices
+from request_fixtures import valid_choices, load_fixture_store
 from services.request_model import MULTIPLE_FIELDS
 
 
@@ -24,7 +24,7 @@ def image_bytes(color="red"):
 
 class PhotoTests(unittest.TestCase):
     def setUp(self):
-        self.store = load_store()
+        self.store = load_fixture_store()
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.root = Path(folder.name)

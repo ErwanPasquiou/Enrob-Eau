@@ -9,7 +9,8 @@ from services.home_service import coordinates
 PERIODS = {"12 derniers mois": 12, "6 derniers mois": 6, "3 derniers mois": 3,
            "Dernier mois": 1, "Dernière semaine": 0}
 STATUSES = (("À traiter", "#cbd7e7"), ("En cours", "#209fff"),
-            ("En attente", "#ffbd16"), ("Refusée", "#e05b71"), ("Clôturée", "#00a26a"))
+            ("En attente", "#ffbd16"), ("Refusée", "#e05b71"), ("Clôturée", "#00a26a"),
+            ("Migration", "#9370db"))
 MONTHS = ("Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sept", "Oct", "Nov", "Déc")
 
 
@@ -129,19 +130,35 @@ def snapshot(store, city="Toutes les communes", period="12 derniers mois", today
                 statuses=[sum(r["status"] == label for r in rows) for label, _ in STATUSES],
                 cities=dict(sorted(Counter(r["city"] for r in rows).items())),
                 missing_locations=count - len({r["reference"] for r in locations}),
+                undated_requests=sum(not as_date(r.get("RequestDate")) for r in store["demandes"]
+                                     if city == "Toutes les communes" or (r.get("ReportedCity") or "Commune non renseignée") == city),
                 excluded_delays=len(completed) - len(delays))
 
 
 def recent_photos(data):
     """Métadonnées des six dernières photos liées, sans créer une base absente."""
     from services import business_data_service
-    from services.photo_service import list_photos
+    from services.photo_service import connection, TABLES, METADATA
     if not (business_data_service.DATA_DIR / "photos.sqlite3").is_file():
         return []
     parents = [("demandes", r["reference"], r["reference"]) for r in data["rows"]]
     orders = {o["WorkOrderReferenceEnrobEau"]: o for o in data["orders"]}
     parents += [("prestations", s["ServiceReference"], orders[s["WorkOrderReferenceEnrobEau"]]["RequestReference"])
                 for s in data["services"]]
-    photos = [dict(photo, table=table, parent=parent, request=request)
-              for table, parent, request in parents for photo in list_photos(table, parent)]
+    photos = []
+    # Requêtes groupées : ne pas recharger les 4 000 demandes pour chaque parent.
+    with connection() as db:
+        for table, (sql_table, parent_field) in TABLES.items():
+            references = {parent: request for kind, parent, request in parents if kind == table}
+            keys = list(references)
+            for offset in range(0, len(keys), 400):
+                batch = keys[offset:offset + 400]
+                placeholders = ','.join('?' for _ in batch)
+                records = db.execute(
+                    f'SELECT {parent_field}, {METADATA} FROM {sql_table} '
+                    f'WHERE {parent_field} IN ({placeholders}) '
+                    'ORDER BY CreatedAt DESC, PhotoReference DESC LIMIT 6', batch)
+                for photo in records:
+                    parent = photo[parent_field]
+                    photos.append(dict(photo, table=table, parent=parent, request=references[parent]))
     return sorted(photos, key=lambda p: (p.get("CreatedAt") or "", p["PhotoReference"]), reverse=True)[:6]

@@ -11,13 +11,16 @@ from streamlit.testing.v1 import AppTest
 from components.reporting import activity_svg, icon, kpi_html, statuses_html, svg_image
 from services.business_data_service import load_store
 from services.reporting_service import PERIODS, period_bounds, snapshot
-from request_fixtures import valid_choices
+from request_fixtures import valid_choices, isolate_local_data
 
 ROOT = Path(__file__).resolve().parents[1]
 TODAY = date(2026, 10, 12)
 
 
 class ReportingTests(unittest.TestCase):
+    def setUp(self):
+        isolate_local_data(self)
+
     def test_known_kpi_formulas_and_codex003(self):
         source = load_store()
         request = dict(source['demandes'][0], **valid_choices())

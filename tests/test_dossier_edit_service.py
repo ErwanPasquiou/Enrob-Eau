@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from services.business_data_service import load_store
 from services.dossier_edit_service import new_record, save_record, change_request_status, delete_record
-from request_fixtures import valid_choices
+from request_fixtures import valid_choices, load_fixture_store
 
 
 class DossierEditTests(unittest.TestCase):
@@ -25,7 +25,7 @@ class DossierEditTests(unittest.TestCase):
             save_record("prestations", dict(saved, TemporaryRepairDate=None), saved)
 
     def setUp(self):
-        self.source = load_store()
+        self.source = load_fixture_store()
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         root = Path(folder.name)
