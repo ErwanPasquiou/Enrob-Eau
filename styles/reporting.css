@@ -46,10 +46,13 @@
 .rp-map { width: 63%; border-radius: 6px; }
 .rp-map text { font-family: "Segoe UI", sans-serif; fill: #234372; font-size: 10px; paint-order: stroke; stroke: #fff; stroke-width: 3px; stroke-linejoin: round; }
 .rp-city-legend li { padding: 8px 0; }
+.rp-city-scroll { max-height: 110px; overflow-y: auto; scrollbar-gutter: stable; }
 .rp-footnote { font-size: 10px; color: #8295b8; margin: 9px 0 0; }
-.rp-table-scroll { overflow-x: auto; padding: 0 0 8px; }
+.rp-table-scroll { max-height: 360px; overflow: auto; scrollbar-gutter: stable; padding: 0 0 8px; }
+.rp-table-scroll, .rp-city-scroll { scrollbar-width: thin; scrollbar-color: #9db7d3 #f6f9fc; }
+.rp-table-scroll:focus-visible, .rp-city-scroll:focus-visible { outline: 2px solid #008aff; outline-offset: 2px; }
 .rp-table { border-collapse: separate; border-spacing: 0; width: 100%; font-size: 12px; }
-.rp-table th { background: #f6f9fc; font-weight: 500; text-align: left; }
+.rp-table th { position: sticky; top: 0; z-index: 1; background: #f6f9fc; font-weight: 500; text-align: left; }
 .rp-table th, .rp-table td { border-bottom: 1px solid #edf1f7; border-right: 1px solid #edf1f7; padding: 11px 12px; white-space: nowrap; }
 .rp-table td:nth-child(3) { white-space: normal; min-width: 140px; }
 .rp-badge { display: inline-block; padding: 4px 12px; border-radius: 30px; font-size: 11px; background: #e7f2ff; color: #0878ce; }

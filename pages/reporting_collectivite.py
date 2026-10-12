@@ -61,18 +61,6 @@ with create_page_content():
             with photos_column, st.container(border=True):
                 st.html('<h2 class="rp-section-title">Dernières photos terrain</h2>')
                 render_recent_photos(data)
-            with st.expander("Comprendre les indicateurs"):
-                st.write("Les filtres sélectionnent les demandes selon leur commune et leur date de création. "
-                         "Les interventions et prestations sont rattachées par leurs références. "
-                         "Une intervention réalisée est une intervention clôturée avec une date de clôture dans la période. "
-                         "Le délai mesure le nombre de jours entre la date de demande et la clôture de chaque intervention. "
-                         "La conformité des données vérifie la demande et toutes ses interventions et prestations "
-                         "avec les règles de validation des formulaires, dont CODEX-003. "
-                         "Elle ne mesure pas la qualité physique des travaux. "
-                         "Les demandes historiques peuvent nécessiter une requalification. "
-                         "Les périodes sont glissantes jusqu’à aujourd’hui ; la dernière semaine comprend aujourd’hui et les six jours précédents.")
-                if data["excluded_delays"]:
-                    st.caption(f'{data["excluded_delays"]} délai(s) négatif(s) exclu(s) de la moyenne.')
         for tab, label, description in (
             (performance, "Performance", "Délais, suivi des interventions et indicateurs de qualité."),
             (dossiers, "Dossiers", "Analyse détaillée et suivi des dossiers du territoire."),

@@ -100,8 +100,9 @@ def statuses_html(data):
 
 
 def render_charts(data):
+    panel_height = 480
     activity_column, status_column, map_column = st.columns([1.6, 1, 1.22], gap="small")
-    with activity_column, st.container(border=True):
+    with activity_column, st.container(height=panel_height, border=True):
         st.html('<h2 class="rp-section-title">Évolution de l’activité</h2>')
         legend = ''.join(f'<span><i style="background:{color}"></i>{label}</span>' for label, color in (
             ("Demandes créées", "#55baff"), ("Interventions réalisées", "#0084ff"),
@@ -109,15 +110,10 @@ def render_charts(data):
         st.html(f'<div class="rp-chart-legend">{legend}</div>'
                 + svg_image(activity_svg(data["activity"]), "rp-activity", "Évolution des demandes, interventions clôturées, prestations réfectionnées et délai moyen")
                 + '<p class="rp-footnote">À gauche : nombres de fiches · à droite : délai en jours</p>')
-        with st.expander("Données du graphique"):
-            st.dataframe([{"Période": r["label"], "Demandes": r["requests"],
-                           "Interventions réalisées": r["completed"], "Réfections définitives": r["repaired"],
-                           "Délai moyen (jours)": r["delay"]} for r in data["activity"]],
-                         hide_index=True, use_container_width=True)
-    with status_column, st.container(border=True):
+    with status_column, st.container(height=panel_height, border=True):
         st.html('<h2 class="rp-section-title">Répartition des statuts</h2>')
         st.html(statuses_html(data))
-    with map_column, st.container(border=True):
+    with map_column, st.container(height=panel_height, border=True):
         st.html('<h2 class="rp-section-title">Activité par commune</h2>')
         render_map(data)
 
@@ -141,6 +137,7 @@ def render_map(data):
             view.zoom = max(1, min(view.zoom - 1, 12))
         st.pydeck_chart(pdk.Deck(
             map_provider="carto", map_style="light", initial_view_state=view, height=230,
+            views=[pdk.View(type="MapView", height=230, controller=True)],
             layers=[pdk.Layer("ScatterplotLayer", data=points, get_position="[longitude, latitude]",
                               get_radius="radius", get_fill_color=[25, 149, 255, 160],
                               get_line_color=[0, 111, 225, 255], stroked=True,
@@ -151,7 +148,7 @@ def render_map(data):
         st.info("Aucune coordonnée disponible pour cette sélection.")
     legend = ''.join(f'<li><i style="background:#168cff"></i><span>{escape(city)}</span><b>{count}</b></li>'
                      for city, count in data["cities"].items())
-    st.html(f'<ul class="rp-legend rp-city-legend">{legend}</ul>')
+    st.html(f'<div class="rp-city-scroll" role="region" aria-label="Activité par commune" tabindex="0"><ul class="rp-legend rp-city-legend">{legend}</ul></div>')
     st.caption(f'{data["missing_locations"]} dossier(s) sans coordonnées. Les points superposés sont regroupés.')
 
 
