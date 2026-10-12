@@ -41,7 +41,20 @@ Le stockage local ne doit pas être considéré comme persistant après un redé
 | **Gestion des dossiers** | Recherche et filtres, détail des dossiers, mode grand écran, fil d'avancement, gestion des demandes/interventions/prestations et de leurs photos. Export d'un dossier. |
 | **Export** | Choix des tables et colonnes, filtres par dossier et téléchargement des données au format CSV. |
 | **Administration** | Création et modification des comptes, activation/désactivation et suppression. Réservée aux administrateurs. |
-| **Réfection définitive** | Espace du sous-traitant : tableau filtrable des prestations, modification des fiches, gestion de leurs photos et consultation des photos de la demande en lecture seule. Remplace Reporting. |
+| **Réfection définitive** | Espace du sous-traitant : tableau filtrable des prestations, modification des fiches, gestion de leurs photos et consultation des photos de la demande en lecture seule. |
+| **Reporting** | Vue d’ensemble collectivité avec KPI, évolution de l’activité, répartition des statuts, carte schématique, dossiers prioritaires et illustrations. Scénario fictif indépendant ; quatre autres sous-onglets réservés aux étapes suivantes. |
+
+### Reporting collectivité — première itération
+
+La route `reporting` utilise `pages/reporting_collectivite.py`. Elle est disponible pour les agents, ordonnanceurs et administrateurs. Les agents externes conservent uniquement leur espace Réfection définitive, dont le script reste `pages/reporting.py`.
+
+Les cinq sous-onglets sont **Vue d’ensemble**, **Performance**, **Dossiers**, **Photos** et **Export**. Seule la Vue d’ensemble est construite à ce stade ; les quatre autres affichent un emplacement explicite pour les prochaines étapes. L’Export principal de l’application reste indépendant.
+
+Le scénario de `services/reporting_demo_service.py` est figé au **7 octobre 2026**. Il contient 13 demandes fictives, 9 interventions réalisées, 3 dossiers en attente de réfection définitive, un délai moyen de 7,4 jours et 12 dossiers conformes sur 13 (92 % arrondis). Il ne lit ni ne modifie les JSON, les photos SQLite ou les tables Databricks.
+
+Les filtres **Collectivité** et **Période** (12, 6 ou 3 derniers mois, mois courant partiel inclus) sélectionnent une cohorte selon la date de création des demandes. Tous les blocs utilisent cette sélection. Le graphique répartit les créations et réalisations selon leur propre date ; les mois sans intervention n’ont pas de délai moyen. La conformité et les échéances sont des attributs de démonstration, sans nouvelle règle imposée au modèle métier. Les onglets des dossiers prioritaires distinguent les retards et les échéances des 14 prochains jours.
+
+Le rendu reprend la composition du visuel fourni, avec les composants Streamlit et des graphiques SVG locaux. La carte est **schématique**, les vignettes sont des **illustrations de chantier**, et aucune variation par rapport à une période précédente n’est affichée faute de scénario de comparaison. Les graphiques, la carte et les illustrations ne nécessitent aucun service distant. Les composants sont dans `components/reporting.py` et les styles propres à cet écran dans `styles/reporting.css`.
 
 ### Créer et suivre sa demande dans la page Demandes
 

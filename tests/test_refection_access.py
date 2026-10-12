@@ -17,8 +17,8 @@ class RefectionAccessTests(unittest.TestCase):
 
     def test_permissions_and_default_routes(self):
         expected = {
-            "agent": {"accueil", "forms", "refection", "dossiers", "export"},
-            "ordonnanceur": {"accueil", "forms", "refection", "dossiers", "export"},
+            "agent": {"accueil", "forms", "refection", "dossiers", "reporting", "export"},
+            "ordonnanceur": {"accueil", "forms", "refection", "dossiers", "reporting", "export"},
             "agent externe": {"refection"},
             "administrateur": {p[0] for p in PAGES},
             "collectivité": set(),
@@ -32,7 +32,7 @@ class RefectionAccessTests(unittest.TestCase):
         self.assertEqual(page_href("agent", "accueil", "accueil"), "./accueil")
 
     def test_external_direct_access_is_denied_before_loading_data(self):
-        for script in ["accueil.py", "forms.py", "gestion_des_dossiers.py", "export.py", "administration.py"]:
+        for script in ["accueil.py", "forms.py", "gestion_des_dossiers.py", "reporting_collectivite.py", "export.py", "administration.py"]:
             with self.subTest(script=script), patch("services.business_data_service.load_store") as load:
                 app = AppTest.from_file(str(ROOT / "pages" / script))
                 app.session_state["current_user"] = {"actif": True, "profil": "agent externe"}

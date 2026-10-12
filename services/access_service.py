@@ -8,6 +8,7 @@ PAGES = (
     ("forms", "Demandes", "pages/forms.py", "forms"),
     ("refection", "Réfection définitive", "pages/reporting.py", "refection-definitive"),
     ("dossiers", "Gestion des dossiers", "pages/gestion_des_dossiers.py", "gestion-des-dossiers"),
+    ("reporting", "Reporting", "pages/reporting_collectivite.py", "reporting"),
     ("export", "Export", "pages/export.py", "export"),
     ("administration", "Administration", "pages/administration.py", "administration"),
 )
