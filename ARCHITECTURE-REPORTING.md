@@ -44,54 +44,43 @@ page, listes métier, choix multiples, compteur conditionnel, compatibilité des
 données historiques. Le README et le code ont déjà intégré ces évolutions.
 L’ajout du Reporting ne nécessite aucune nouvelle migration de ces données.
 
-## Décisions de cette première itération
+## Reporting raccordé aux données de l’application
 
-Le fichier existant **`pages/reporting.py` correspond à Réfection définitive**.
-Le nouveau Reporting utilise donc `pages/reporting_collectivite.py`, une clé
-de navigation `reporting` et l’URL `/reporting`. Son accès suit les profils internes.
+La route `/reporting` utilise `pages/reporting_collectivite.py` et reste accessible
+aux profils internes. La Réfection définitive conserve son fichier `pages/reporting.py`.
+Les cinq sous-onglets sont conservés ; seule la Vue d’ensemble est construite.
 
-La page comporte cinq sous-onglets conformes au visuel : Vue d’ensemble,
-Performance, Dossiers, Photos et Export. La Vue d’ensemble est implémentée ;
-les quatre autres restent des emplacements pour les prochaines itérations.
+`services/reporting_service.py` reçoit le même `load_store()` que les autres pages.
+Il sélectionne les demandes par `RequestDate` et `ReportedCity`, rattache les
+interventions par `RequestReference`, puis les prestations par
+`WorkOrderReferenceEnrobEau`. Chaque indicateur conserve le niveau de sa table.
+Le scénario indépendant de la première version a été supprimé.
 
-Le scénario fictif est centralisé dans `services/reporting_demo_service.py`.
-Les composants HTML/SVG sont dans `components/reporting.py` et la présentation
-adaptative dans `styles/reporting.css`. Aucune bibliothèque supplémentaire n’est
-nécessaire. Le reporting ne charge pas les JSON métier ni les bases SQLite,
-ce qui évite de mélanger les indicateurs de démonstration avec les dossiers saisis.
+Les périodes glissantes couvrent 12, 6, 3 ou 1 mois, ainsi que les 7 derniers jours.
+La date de référence est celle du serveur à chaque exécution. Le README décrit
+les formules et règles de filtrage de chacun des cinq KPI.
 
-Les KPI, les répartitions et les séries utilisent une seule cohorte filtrée par
-commune et date de création. Le scénario est figé au 7 octobre 2026 pour conserver
-des échéances et des résultats reproductibles. Les périodes comprennent le mois
-courant partiel. Les définitions de conformité, délais et échéances devront être
-validées avant le raccordement aux données métier.
+La conformité des données utilise les validations existantes des fiches, notamment
+CODEX-003. Elle ne mesure pas la qualité physique des travaux et ne modifie pas les
+fiches historiques. Les dossiers ayant des données à compléter sont consultables
+avec les motifs des validations échouées.
 
-## Différences explicites avec le visuel
+Les graphiques et icônes de `components/reporting.py` sont des images SVG encodées,
+avec espace de noms et styles embarqués. La carte est un composant PyDeck natif
+identique dans son principe à celui de l’accueil : positions enregistrées,
+regroupement des points superposés, fond Carto et compteur de demandes non localisées.
+Les photos sont lues depuis les tables SQLite existantes, en limitant les binaires
+aux six dernières photos affichées. Aucune illustration ou échéance inventée ne
+subsiste. Les styles sont limités à la page Reporting dans `styles/reporting.css`.
 
-- L’en-tête et l’identité graphique restent ceux du projet existant.
-- Les volumes mensuels sont calculés à partir des 13 dossiers : les totaux restent
-  cohérents avec les KPI, contrairement à une reprise indépendante des barres du visuel.
-- Les variations de période ne sont pas affichées : aucune base comparative
-  n’est encore définie.
-- La carte est un schéma local, avec des positions indicatives, sans fond géographique distant.
-- Les six vignettes sont des illustrations SVG de chantier, identifiées comme telles.
-- Les quatre futurs sous-onglets indiquent leur état ; aucun bouton ne prétend
-  ouvrir un détail ou exporter un bilan qui n’existe pas encore.
+## Vérifications
 
-## Vérifications et limites de validation
+`tests/test_reporting.py` couvre les jointures, la conservation des niveaux de
+comptage avec plusieurs enfants, les périodes glissantes et les sélections vides,
+les SVG encodés, les nouveaux filtres Streamlit et le refus des accès non autorisés.
+Les tests d’accès à Réfection définitive restent applicables.
 
-`tests/test_reporting.py` couvre la cohérence des agrégations pour chaque filtre,
-les échéances, la sélection vide, les contrôles d’accès et le chargement Streamlit
-sans accès aux données métier. `tests/test_refection_access.py` prend en compte
-la nouvelle page dans les permissions internes et les refus d’accès externe.
-
-Le contrôle `git diff --check` ne signale aucune erreur d’espacement. Les
-inspections PyCharm ne signalent pas d’erreur dans le service de démonstration,
-les composants HTML/SVG ou le CSS. Elles signalent des imports Streamlit non
-résolus dans la page et les tests.
-
-**Les tests et la vérification navigateur ne sont pas exécutés** : le SDK déclaré
-par PyCharm pointe vers `E:/EnrobEau/.venv/Scripts/python.exe`, absent dans cet
-environnement. Le répertoire du projet est `E:/EnrobEau_dev` et contient un
-environnement `.venv`. Il reste à corriger le SDK du projet avant de lancer la
-suite et de valider le rendu dans la session authentifiée.
+Les inspections statiques sont effectuées dans PyCharm. Le SDK déclaré pointe
+encore vers `E:/EnrobEau/.venv/Scripts/python.exe`, absent dans cet environnement,
+alors que le projet est dans `E:/EnrobEau_dev`. Les tests automatisés et le rendu
+navigateur restent à exécuter avec un interpréteur et une session fonctionnels.

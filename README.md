@@ -42,7 +42,7 @@ Le stockage local ne doit pas être considéré comme persistant après un redé
 | **Export** | Choix des tables et colonnes, filtres par dossier et téléchargement des données au format CSV. |
 | **Administration** | Création et modification des comptes, activation/désactivation et suppression. Réservée aux administrateurs. |
 | **Réfection définitive** | Espace du sous-traitant : tableau filtrable des prestations, modification des fiches, gestion de leurs photos et consultation des photos de la demande en lecture seule. |
-| **Reporting** | Vue d’ensemble collectivité avec KPI, évolution de l’activité, répartition des statuts, carte schématique, dossiers prioritaires et illustrations. Scénario fictif indépendant ; quatre autres sous-onglets réservés aux étapes suivantes. |
+| **Reporting** | KPI calculés sur les demandes, interventions et prestations de l’application, graphiques, carte interactive, dossiers à suivre et photos enregistrées. Quatre autres sous-onglets réservés aux étapes suivantes. |
 
 ### Reporting collectivité — première itération
 
@@ -50,11 +50,41 @@ La route `reporting` utilise `pages/reporting_collectivite.py`. Elle est disponi
 
 Les cinq sous-onglets sont **Vue d’ensemble**, **Performance**, **Dossiers**, **Photos** et **Export**. Seule la Vue d’ensemble est construite à ce stade ; les quatre autres affichent un emplacement explicite pour les prochaines étapes. L’Export principal de l’application reste indépendant.
 
-Le scénario de `services/reporting_demo_service.py` est figé au **7 octobre 2026**. Il contient 13 demandes fictives, 9 interventions réalisées, 3 dossiers en attente de réfection définitive, un délai moyen de 7,4 jours et 12 dossiers conformes sur 13 (92 % arrondis). Il ne lit ni ne modifie les JSON, les photos SQLite ou les tables Databricks.
+Le reporting utilise **les mêmes données que le reste de l’application**, chargées par `services/business_data_service.load_store()` : `data/exemples/demandes.json`, `interventions.json` et `prestations.json`. Aucun compteur fixe ni scénario indépendant n’est utilisé. Les agrégations sont dans `services/reporting_service.py`, les composants dans `components/reporting.py` et les styles dans `styles/reporting.css`.
 
-Les filtres **Collectivité** et **Période** (12, 6 ou 3 derniers mois, mois courant partiel inclus) sélectionnent une cohorte selon la date de création des demandes. Tous les blocs utilisent cette sélection. Le graphique répartit les créations et réalisations selon leur propre date ; les mois sans intervention n’ont pas de délai moyen. La conformité et les échéances sont des attributs de démonstration, sans nouvelle règle imposée au modèle métier. Les onglets des dossiers prioritaires distinguent les retards et les échéances des 14 prochains jours.
+#### Périmètre, jointures et périodes
 
-Le rendu reprend la composition du visuel fourni, avec les composants Streamlit et des graphiques SVG locaux. La carte est **schématique**, les vignettes sont des **illustrations de chantier**, et aucune variation par rapport à une période précédente n’est affichée faute de scénario de comparaison. Les graphiques, la carte et les illustrations ne nécessitent aucun service distant. Les composants sont dans `components/reporting.py` et les styles propres à cet écran dans `styles/reporting.css`.
+1. Sélection des demandes dont **`RequestDate`** est comprise dans la période, bornes incluses, et dont **`ReportedCity`** correspond à la commune choisie. La date de demande est utilisée, pas le champ technique `CreatedAt`.
+2. Rattachement des interventions par **`interventions.RequestReference = demandes.RequestReference`**.
+3. Rattachement des prestations par **`prestations.WorkOrderReferenceEnrobEau = interventions.WorkOrderReferenceEnrobEau`**. La référence SI SAUR ne sert pas de clé de jointure.
+
+Tous les blocs portent sur cette **cohorte de demandes** et leurs enfants. Une intervention clôturée pendant la période mais appartenant à une demande créée avant celle-ci n’est donc pas incluse. Chaque table est comptée à son propre niveau : plusieurs prestations n’augmentent ni le nombre de demandes ni celui des interventions.
+
+Les périodes sont glissantes jusqu’à la date du jour du serveur : **12 derniers mois**, **6 derniers mois**, **3 derniers mois**, **Dernier mois**, **Dernière semaine**. Pour les mois, la borne initiale est le lendemain de la même date N mois auparavant, ajustée au dernier jour du mois si nécessaire. La semaine couvre aujourd’hui et les six jours précédents.
+
+Exemple au **12/10/2026** : dernier mois = **13/09/2026 → 12/10/2026**, dernière semaine = **06/10/2026 → 12/10/2026**. Sans demande, les compteurs sont nuls et les moyennes/taux affichent `—`. Les dates absentes ou illisibles ne sont pas remplacées par des valeurs fictives.
+
+#### Calcul de chaque KPI
+
+| KPI affiché | Tables et champs utilisés | Calcul exact |
+| --- | --- | --- |
+| **Demandes créées** | `demandes.RequestReference`, `RequestDate`, `ReportedCity` | Nombre de demandes de la cohorte filtrée. Chaque demande compte une fois, quel que soit son nombre d’enfants. |
+| **Interventions réalisées** | Demandes sélectionnées + `interventions.WorkOrderReferenceEnrobEau`, `RequestReference`, `WorkOrderStatus`, `ClosedAt` | Nombre d’interventions liées avec `WorkOrderStatus = "Clôturée"` et une date `ClosedAt` renseignée dans la période. Une prestation terminée ne suffit pas à compter son intervention comme réalisée. |
+| **Prestations en attente de réfection définitive** | Demandes sélectionnées + interventions liées + `prestations.ServiceReference`, `WorkOrderReferenceEnrobEau`, `ServiceStatus`, `HasTemporaryRepair`, `TemporaryRepairDate`, `FinalRepairDate` | Nombre de prestations liées avec `ServiceStatus = "En cours"`, une réfection provisoire indiquée (`HasTemporaryRepair` vrai **ou** `TemporaryRepairDate` renseignée), et aucune `FinalRepairDate`. Même règle que l’accueil. C’est l’état actuel des prestations de la cohorte, sans reconstruction historique. |
+| **Délai moyen de traitement** | `demandes.RequestDate` + `interventions.RequestReference`, `WorkOrderStatus`, `ClosedAt` | Moyenne des différences **date(`ClosedAt`) − date(`RequestDate`)**, en jours calendaires, sur les interventions réalisées définies ci-dessus. Chaque intervention pèse une fois, même si plusieurs appartiennent à la même demande. Les heures sont ignorées. Les durées négatives sont exclues et signalées dans les explications. Affichage à une décimale ; `—` sans durée valide. |
+| **Conformité des données** | Demande et toutes ses interventions et prestations ; champs contrôlés par `services/dossier_edit_service.validate_record()` et `services/request_model.py` | **100 × nombre de dossiers sans erreur de validation / nombre de demandes sélectionnées**. Un dossier est conforme si `validate_record()` accepte sa demande et chaque fiche enfant existante. L’absence d’intervention ne constitue pas à elle seule une erreur. Chaque dossier compte une fois. Arrondi à l’entier ; `—` sans dossier. |
+
+**La conformité concerne les données saisies, pas la qualité physique des travaux.** Elle réutilise les contrôles des formulaires : schéma, références, champs requis, statuts, dates, règles des prestations et règles CODEX-003 (choix autorisés, choix multiples, précision « Autre », compteur conditionnel, diamètre et durée). Les relations parent/enfant et l’unicité sont contrôlées au chargement général des tables. Ce n’est pas un audit supplémentaire des champs non contrôlés par les formulaires. Les anciennes demandes hors référentiel peuvent rester lisibles tout en étant non conformes aux validations actuelles. Le reporting n’enregistre aucune correction ; les premiers motifs d’échec de chaque fiche sont consultables dans **Données à compléter**.
+
+#### Graphiques, carte, dossiers et photos
+
+- **Évolution de l’activité** : demandes par `RequestDate`, interventions réalisées par `ClosedAt`, prestations réfectionnées par `FinalRepairDate` valide dans la période. Chaque barre conserve le niveau de sa table. La courbe reprend la moyenne des délais des interventions clôturées dans chaque tranche. Une tranche sans clôture n’a pas de délai moyen. Les périodes de 3/6/12 mois utilisent des tranches mensuelles avec mois extrêmes partiels ; le dernier mois et la dernière semaine utilisent des jours. « Données du graphique » expose les valeurs exactes.
+- **Répartition des statuts** : nombre et proportion des demandes sélectionnées par `RequestStatus` : À traiter, En cours, En attente, Refusée, Clôturée. Chaque demande appartient à un seul secteur.
+- **Activité par commune** : nombre de demandes sélectionnées par `ReportedCity`. La carte interactive reprend `prestations.WorkCoordinates` via les jointures ; à défaut de coordonnées valides dans les prestations d’une demande, elle utilise `demandes.LocationLandmark` au format GPS. Les coordonnées invalides sont exclues, les couples demande/position sont dédoublonnés, les positions superposées regroupées et les demandes sans position signalées. Une demande peut avoir plusieurs positions : le nombre de points n’est pas le nombre de demandes. Le fond Carto nécessite le réseau, comme sur l’accueil. Les coordonnées identiques de certaines données d’exemple sont conservées sans inventer de géocodage.
+- **Dossiers à suivre** : demandes ayant au moins une prestation en attente de réfection, puis dossiers en échec de validation. Ces listes comptent des demandes distinctes ; le KPI d’attente compte des prestations. Le modèle ne contient pas d’échéance contractuelle : aucun retard n’est inventé à partir de la durée estimée des travaux.
+- **Dernières photos terrain** : les six dernières photos enregistrées, triées par `CreatedAt`, liées aux demandes sélectionnées ou à leurs prestations. Les métadonnées proviennent de `PhotoDemande` et `PhotoPrestation` dans la base SQLite de l’application ; seuls les six binaires affichés sont lus. Une base ou une galerie absente affiche un état vide, sans illustration ajoutée.
+
+Chaque KPI possède une icône. Les icônes, le graphique d’activité et l’anneau utilisent des images SVG encodées avec leur espace de noms pour éviter le filtrage des SVG intégrés à `st.html`. La carte utilise `st.pydeck_chart`, comme l’accueil. Aucune dépendance supplémentaire n’est nécessaire.
 
 ### Créer et suivre sa demande dans la page Demandes
 
