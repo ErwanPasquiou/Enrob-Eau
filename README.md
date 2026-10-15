@@ -569,6 +569,19 @@ Les tests de photos génèrent leurs images en mémoire et utilisent des dossier
 
 Les tests CODEX-003 couvrent les listes et obligations, la précision « Autre », le compteur conditionnel, la persistance des choix multiples, la lecture des anciens JSON, les exports, les liens et photos, la concurrence, les cinq sections, le géocodage simulé et la conservation des saisies au retour de l'éditeur photo. Les tests de widgets créant des brouillons utilisent un stockage temporaire pour ne pas consommer les compteurs du projet.
 
+### Tests automatiques sur GitHub
+
+Le workflow [Tests Enrob'Eau](.github/workflows/tests.yml) exécute la suite existante :
+
+- à chaque push sur `dev` ;
+- à l'ouverture, à la réouverture et à chaque mise à jour d'une pull request visant `main`, avant sa fusion.
+
+Le contrôle **Tests Windows - Python 3.11** utilise une machine GitHub `windows-latest` et Python 3.11. Il installe `requirements.txt`, vérifie les dépendances avec `python -m pip check`, puis lance `python -m unittest discover -s tests -v`. Windows permet d'inclure le test de conversion Excel via PowerShell. Le téléchargement des dépendances est mis en cache ; chaque exécution réinstalle les dépendances requises. Les actions GitHub sont fixées à des commits précis et le workflow dispose uniquement de la permission `contents: read`.
+
+Les résultats et journaux sont consultables dans l'onglet **Actions** du dépôt et dans les contrôles de la pull request. Une erreur d'installation ou un test en échec fait échouer le contrôle. Le workflow n'utilise aucun secret Databricks, n'effectue aucune fusion et ne contient aucune étape de déploiement.
+
+**Exécuter les tests avant fusion ne rend pas leur réussite obligatoire à lui seul.** Pour bloquer une fusion en cas d'échec, une règle de protection de `main` doit rendre le contrôle **Tests Windows - Python 3.11** obligatoire. Cette configuration du dépôt est distincte du fichier de workflow. La validation fonctionnelle avant promotion reste nécessaire.
+
 ## Limites et points de vigilance
 
 - **Persistance** : JSON et SQLite sont locaux. Un stockage durable est à mettre en place avant un usage de production.
