@@ -7,6 +7,7 @@ Elle permet de signaler des travaux, de suivre leur avancement, de gérer les ph
 ## Sommaire
 
 - [État actuel du projet](#état-actuel-du-projet)
+- [Cadrage et évolutions prévues](#cadrage-et-évolutions-prévues)
 - [Navigation et fonctionnalités](#navigation-et-fonctionnalités)
 - [Photos](#photos)
 - [Adresses, carte et exports](#adresses-carte-et-exports)
@@ -32,6 +33,33 @@ Les formulaires modifient réellement les fichiers locaux du prototype. Les doss
 
 Le stockage local ne doit pas être considéré comme persistant après un redéploiement. Conserver les JSON et les bases SQLite si les essais doivent être sauvegardés. Le fonctionnement actuel vise une seule instance de l'application.
 
+## Cadrage et évolutions prévues
+
+Précisions du porteur du projet au **15 octobre 2026** :
+
+- **Dépôt public volontairement** pour le raccordement et le déploiement Databricks utilisés par le projet. Ce choix ne dispense pas de vérifier les données et fichiers publiés ; aucun secret ne doit être versionné.
+- **Seule la table d'administration est actuellement réelle dans Databricks.** La mise en place des autres tables est prévue après obtention du GO projet, à la suite de la présentation prévue le **21 octobre 2026**. Les JSON et SQLite restent le stockage du prototype jusque-là ; aucune migration n'est déclenchée par ce cadrage.
+- **Accès :** la matrice cible ci-dessous reste à implémenter dans un lot dédié ; les règles métier détaillées seront précisées ultérieurement.
+- **Secours de l'administration :** créé pour une démonstration lors d'une indisponibilité Databricks, il est destiné au développement uniquement. Le code actuel ne comporte pas encore de garde d'environnement empêchant son activation ailleurs.
+- **Reporting :** support exploratoire de présentation, sans périmètre ni indicateurs définitifs arrêtés. La Vue d'ensemble calcule déjà des résultats ; cette implémentation ne vaut pas validation métier du reporting cible.
+- **Béton et réfection provisoire :** le sens métier précisé est « Un béton était-il présent ? » et « Une réfection provisoire était-elle présente ? ». Les libellés et règles de dates actuels sont décrits plus bas ; leur éventuelle adaptation devra faire l'objet d'un lot explicite.
+- **Traçabilité :** aucun historique détaillé des modifications n'est demandé à ce stade. Les mécanismes existants sont conservés.
+
+### Schéma cible et modèle du prototype
+
+Le schéma « Operations&Maintenance - Application - Enrob'Eau - Global view.drawio (1).svg », communiqué le 15 octobre 2026, est une référence de conception pour la suite. Sa présence ne signifie pas que toutes les tables représentées sont déployées ou connectées. Le fichier source reste externe au dépôt.
+
+Avant le lot Databricks, rapprocher notamment les éléments suivants :
+
+- le schéma présente `Administration` avec `Id`, `FirstName`, `LastName`, `Email`, `Profil`, `Status`, `CreatedAt` et `UpdateAt`, alors que l'interface SQL actuelle attend `id`, `nom`, `prenom`, `email`, `profil`, `actif` et `date_creation` ; la correspondance doit être définie à partir de la table réelle, sans renommer implicitement ses colonnes ;
+- le schéma représente les photos via `RequestPhoto` et `ServicePhoto`, avec notamment un `StoragePath` ; le prototype utilise `PhotoDemande` et `PhotoPrestation` avec des binaires SQLite ;
+- le bloc `ServicePhoto` porte encore les libellés `RequestPhotoReference` et `RequestReference` ; confirmer les clés prévues pour les photos de prestation avant la migration, sans reprendre implicitement ces libellés dans le code ;
+- `Permit` et les sources SI SAUR représentées ne sont pas chargés par le prototype. Le lien SI SAUR prévu ne remplace pas les relations internes fondées sur `WorkOrderReferenceEnrobEau`.
+
+### Documents de lot historiques
+
+Les anciens documents CODEX-001, CODEX-002 et CODEX-003 ne sont plus conservés dans l'arbre courant. Le README décrit les comportements effectivement implémentés. Les identifiants de lots encore présents dans les tests, messages de diagnostic et chemins de sauvegarde restent des repères historiques ; leur présence ne demande pas de réexécuter ces lots. Les outils de migration existants restent disponibles.
+
 ## Navigation et fonctionnalités
 
 | Page | Fonctionnalités |
@@ -44,7 +72,9 @@ Le stockage local ne doit pas être considéré comme persistant après un redé
 | **Réfection définitive** | Espace du sous-traitant : tableau filtrable des prestations, modification des fiches, gestion de leurs photos et consultation des photos de la demande en lecture seule. |
 | **Reporting** | KPI calculés sur les demandes, interventions et prestations de l’application, graphiques, carte interactive, dossiers à suivre et photos enregistrées. Quatre autres sous-onglets réservés aux étapes suivantes. |
 
-### Reporting collectivité — première itération
+### Reporting collectivité — prototype exploratoire
+
+**Les fonctionnalités et formules ci-dessous décrivent le code actuel, pas un cahier des charges définitif.** Le reporting reste à cadrer avec les utilisateurs ; ses autres sous-onglets sont des emplacements réservés.
 
 La route `reporting` utilise `pages/reporting_collectivite.py`. Elle est disponible pour les agents, ordonnanceurs et administrateurs. Les agents externes conservent uniquement leur espace Réfection définitive, dont le script reste `pages/reporting.py`.
 
@@ -171,6 +201,8 @@ La page présente toutes les prestations du prototype, sans affectation individu
 
 ### Règles métier principales
 
+Les intitulés métier à retenir pour le béton et la réfection provisoire portent sur leur **présence préalable**, et non simplement sur une réalisation Oui/Non. Le tableau ci-dessous décrit les règles de dates actuellement codées ; cette clarification documentaire ne les modifie pas.
+
 | Élément | Règle |
 | --- | --- |
 | Statut de demande | À traiter, En cours, En attente, Refusée ou Clôturée. |
@@ -246,6 +278,8 @@ Les choix multiples d'une demande sont exportés sous forme de tableau JSON dans
 
 ## Identification et droits
 
+### Accès actuellement implémentés
+
 [app.py](app.py) récupère l'e-mail transmis dans l'en-tête `X-Forwarded-Email`, puis recherche le compte dans la table d'administration. L'accès nécessite un compte actif avec l'un des profils suivants :
 
 | Profil stocké | Page à l'ouverture | Accès |
@@ -255,13 +289,27 @@ Les choix multiples d'une demande sont exportés sous forme de tableau JSON dans
 | `agent externe` | Réfection définitive | Uniquement Réfection définitive et la consultation des photos associées. Modification des prestations et gestion de leurs photos ; photos des demandes en lecture seule. |
 | `administrateur` | Accueil | Toutes les pages, y compris Administration. |
 
-Le rôle `collectivité` est supprimé. **Les comptes existants portant ce rôle doivent être réaffectés par un administrateur** ; ils ne sont pas automatiquement convertis en agents externes. Pour créer un compte sous-traitant, choisir **Agent externe** dans Administration (valeur stockée : `agent externe`).
+Le rôle `collectivité` n'est pas reconnu par le code actuel : un compte avec ce profil ne peut pas accéder à l'application. Son retour est prévu dans la matrice cible ci-dessous ; aucune conversion automatique vers un autre profil n'est effectuée. Pour créer un compte sous-traitant, choisir **Agent externe** dans Administration (valeur stockée : `agent externe`).
 
 La politique commune de [services/access_service.py](services/access_service.py) contrôle le menu et l'accès direct aux pages. L'agent conserve ses accès métier mais arrive directement dans la page Demandes. Le filtrage de la page Demandes limite cette page aux demandes du compte connecté ; Gestion des dossiers et Export ne sont pas limités à ses propres demandes.
 
 Un e-mail absent, un compte inconnu ou inactif ou un profil non reconnu bloque l'accès. Les e-mails dupliqués dans la table d'administration sont également refusés, sans déclencher le secours.
 
+### Matrice cible — à implémenter
+
+| Profil | Accès cible |
+| --- | --- |
+| Administrateur | Toutes les pages, y compris Administration. |
+| Ordonnanceur | Toutes les pages, sauf Administration. |
+| Agent | Demandes uniquement. |
+| Agent externe | Réfection définitive uniquement. |
+| Collectivité | Reporting uniquement. |
+
+Cette orientation ne modifie pas les droits du prototype. La restriction de l'agent et l'ajout de l'accès collectivité restent à développer et tester. Les périmètres de données, les actions autorisées et les éventuelles affectations par entreprise seront définis ultérieurement ; ils ne se déduisent pas de la seule visibilité des pages. Les règles de consultation des photos associées devront être précisées dans ce lot.
+
 ### Mode dégradé temporaire de l'administration
+
+**Usage prévu : développement uniquement.** Ce secours a été ajouté pour une démonstration pendant une panne Databricks. Il n'est pas retenu comme mécanisme de continuité en production. **Cette restriction n'est pas encore imposée techniquement** : la bascule automatique décrite ci-dessous reste active dans le code actuel. Un lot dédié devra empêcher son activation hors développement avant un usage en production.
 
 Une exception technique pendant la récupération du profil Databricks active automatiquement le stockage local pour la session. Un bandeau **Mode dégradé temporaire** indique cette bascule. Les lectures, créations, modifications, activations/désactivations et suppressions des comptes utilisent alors `data/exemples/administration.sqlite3`, avec les mêmes formulaires et validations. L'erreur initiale est journalisée côté serveur.
 

@@ -196,6 +196,8 @@ Selon l’état réel du repository, cela peut notamment comprendre :
 
 Toujours analyser le repository avant de supposer le mécanisme exact actuellement en place.
 
+Au cadrage du 15 octobre 2026, seule la table d'administration est réelle dans Databricks. Les autres tables sont prévues sous réserve d'obtention du GO projet après la présentation prévue le 21 octobre 2026. Conserver le stockage local tant qu'un lot de migration n'est pas explicitement demandé. Un schéma cible fourni en référence ne constitue ni une preuve de déploiement ni une instruction de migration.
+
 ## Règle importante
 
 Ne pas ajouter de nouvelle connexion métier vers :
@@ -222,6 +224,8 @@ Le projet peut utiliser notamment :
 - ressources déclarées dans `app.yaml`.
 
 Ne jamais affaiblir l’authentification ou les contrôles d’accès pour faciliter le développement local.
+
+Le secours SQLite de l'administration a été créé pour une démonstration lors d'une panne Databricks. Son usage est réservé au développement dans la cible. Le code actuel ne comporte pas encore de garde d'environnement : ne pas présenter cette limitation d'usage comme déjà appliquée techniquement. Son exclusion de la production devra être implémentée dans un lot dédié.
 
 Ne jamais coder en dur :
 
@@ -343,6 +347,18 @@ Les profils actuellement reconnus sont :
 
 Ne pas réintroduire un ancien rôle sans nouvelle décision métier explicite.
 
+### Orientation cible communiquée le 15 octobre 2026
+
+| Profil | Accès prévu |
+| --- | --- |
+| Administrateur | Tout, y compris Administration. |
+| Ordonnanceur | Tout sauf Administration. |
+| Agent | Demandes uniquement. |
+| Agent externe | Réfection définitive uniquement. |
+| Collectivité | Reporting uniquement. |
+
+Cette orientation prévoit le retour d'un accès collectivité et la restriction de l'agent. Elle n'est pas encore implémentée et les règles détaillées seront décrites ultérieurement. Ne pas modifier les droits, créer un profil ou inventer un périmètre de données sur la seule base de cette documentation : attendre le lot correspondant. Le README distingue les accès actuels de cette cible.
+
 Une restriction visuelle dans l’interface ne constitue pas à elle seule un contrôle d’accès.
 
 Lorsqu’une page ou action est sensible, vérifier :
@@ -398,6 +414,12 @@ Lorsqu’une règle métier évolue :
 - vérifier les données historiques.
 
 Ne jamais supprimer ou assouplir silencieusement une règle existante.
+
+### Cadrage fonctionnel du 15 octobre 2026
+
+- Les questions sur le béton et la réfection provisoire concernent leur présence préalable : « Un béton était-il présent ? » et « Une réfection provisoire était-elle présente ? ». Ne pas déduire de cette clarification de nouvelles règles de dates sans lot explicite.
+- Le reporting reste un support exploratoire de présentation ; ses indicateurs et parcours ne sont pas arrêtés. Les calculs existants ne constituent pas une validation métier de la cible.
+- Un historique détaillé des modifications n'est pas demandé à ce stade. Conserver la traçabilité existante sans l'étendre de sa propre initiative.
 
 ---
 
@@ -600,9 +622,9 @@ Développement sur dev
 
 # 22. GitHub
 
-Le repository Enrob’Eau est privé.
+Le repository Enrob’Eau est public par choix explicite du porteur du projet pour le raccordement et le déploiement Databricks utilisés actuellement.
 
-Préserver son caractère privé.
+Ne pas modifier sa visibilité sans demande explicite. Ce choix ne dispense pas de vérifier l'absence de secrets et de données sensibles dans les modifications publiées.
 
 Ne pas :
 
