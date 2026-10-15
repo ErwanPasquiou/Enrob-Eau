@@ -42,7 +42,7 @@ Précisions du porteur du projet au **15 octobre 2026** :
 - **Accès :** la matrice cible ci-dessous reste à implémenter dans un lot dédié ; les règles métier détaillées seront précisées ultérieurement.
 - **Secours de l'administration :** créé pour une démonstration lors d'une indisponibilité Databricks, il est destiné au développement uniquement. Le code actuel ne comporte pas encore de garde d'environnement empêchant son activation ailleurs.
 - **Reporting :** support exploratoire de présentation, sans périmètre ni indicateurs définitifs arrêtés. La Vue d'ensemble calcule déjà des résultats ; cette implémentation ne vaut pas validation métier du reporting cible.
-- **Béton et réfection provisoire :** le sens métier précisé est « Un béton était-il présent ? » et « Une réfection provisoire était-elle présente ? ». Les libellés et règles de dates actuels sont décrits plus bas ; leur éventuelle adaptation devra faire l'objet d'un lot explicite.
+- **Béton et réfection provisoire :** le formulaire demande désormais « Un béton de 2 cm était-il présent ? » et « Une réfection provisoire était-elle présente ? ». Seuls les libellés ont changé ; les règles de dates restent identiques.
 - **Traçabilité :** aucun historique détaillé des modifications n'est demandé à ce stade. Les mécanismes existants sont conservés.
 
 ### Schéma cible et modèle du prototype
@@ -201,7 +201,7 @@ La page présente toutes les prestations du prototype, sans affectation individu
 
 ### Règles métier principales
 
-Les intitulés métier à retenir pour le béton et la réfection provisoire portent sur leur **présence préalable**, et non simplement sur une réalisation Oui/Non. Le tableau ci-dessous décrit les règles de dates actuellement codées ; cette clarification documentaire ne les modifie pas.
+Le formulaire de création et de modification d'une prestation utilise les libellés **« Un béton de 2 cm était-il présent ? »** (`HasConcrete2Cm`) et **« Une réfection provisoire était-elle présente ? »** (`HasTemporaryRepair`). Ils portent sur la présence préalable. Les choix **Non renseigné / Oui / Non**, les champs stockés et les règles de dates du tableau ci-dessous sont conservés. Les libellés sont partagés avec les autres affichages de ces champs ; les noms techniques des colonnes CSV restent inchangés.
 
 | Élément | Règle |
 | --- | --- |

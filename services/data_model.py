@@ -29,8 +29,8 @@ LABELS = {
     "WorkCoordinates": "Coordonnées des travaux", "WorkReason": "Motif des travaux",
     "SurfaceRepairType": "Type de réfection de surface", "RoadType": "Type de voirie",
     "Comment": "Commentaire", "ExcavationDate": "Date de terrassement", "BackfillDate": "Date de remblaiement",
-    "Concrete2CmDate": "Date du béton 2 cm", "HasConcrete2Cm": "Béton 2 cm réalisé",
-    "TemporaryRepairDate": "Date de réfection provisoire", "HasTemporaryRepair": "Réfection provisoire réalisée",
+    "Concrete2CmDate": "Date du béton 2 cm", "HasConcrete2Cm": "Un béton de 2 cm était-il présent ?",
+    "TemporaryRepairDate": "Date de réfection provisoire", "HasTemporaryRepair": "Une réfection provisoire était-elle présente ?",
     "FinalRepairDate": "Date de réfection définitive", "ServiceStatus": "Statut de la prestation",
 }
 DATE_FIELDS = {field for fields in SCHEMAS.values() for field in fields if field.endswith("Date") or field.endswith("At")}
