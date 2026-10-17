@@ -322,47 +322,62 @@ Pour retirer ce contournement : supprimer la branche de secours dans `services/a
 
 ## Administration — consommation et coûts
 
-L'espace **Consommation et coûts** lit les consommations des deux ressources configurées dans `system.billing.usage`. Il fonctionne indépendamment du chargement de la liste des utilisateurs. Les opérations de gestion des comptes et leurs droits restent identiques ; leur interface est isolée dans `components/administration_users.py` pour ne charger que l'espace sélectionné.
+L'Administration conserve l'espace **Utilisateurs** et propose un espace **Consommation et coûts** pour suivre plusieurs serveurs App et computes SQL. Les données métier et les comptes ne sont pas migrés par ce lot.
 
-### Utilisation
+### Règles de calcul retenues le 17 octobre 2026
 
-1. Ouvrir **Administration → Consommation et coûts → Périmètre et tarifs**.
-2. Saisir l'identifiant de l'application (pas celui de son service principal) et celui du SQL Warehouse. Aucun workspace_id supplémentaire n'est requis : la lecture est limitée à ces deux identifiants.
-3. Renseigner les tarifs de référence **en €/DBU**. Le tarif application par défaut est **1 €/DBU**, selon le cadrage du porteur du projet ; le tarif SQL est volontairement vide tant qu'il n'est pas confirmé. Un prix en €/h n'est pas interchangeable avec un prix en €/DBU.
-4. Conserver le Warehouse en **partagé** tant qu'il sert à d'autres usages. Ne le déclarer dédié qu'après mise en place d'un Warehouse exclusif à Enrob'Eau.
-5. Choisir la période (mois en cours, précédent, 30 derniers jours ou dates personnalisées, 366 jours maximum), puis **Actualiser les consommations**.
+| Ressource | Source réelle | Consommation | Calcul du coût estimé | Tarif initial |
+| --- | --- | --- | --- | --- |
+| Serveur App | `system.billing.usage`, filtre `usage_metadata.app_id` | Somme signée des `usage_quantity` en DBU | DBU × €/DBU | 1 €/DBU |
+| Compute SQL | `system.query.history`, filtre `compute.warehouse_id` | Somme de `execution_duration_ms` / 1 000 | Secondes / 3 600 × €/h | 0,90 €/h |
 
-Les cartes affichent les DBU reçues et leur coût estimé. Le Warehouse partagé reste séparé du montant attribuable à l'application ; aucune allocation aux requêtes Enrob'Eau n'est inventée. En mode dédié, le total application + Warehouse n'est disponible que si les deux consommations et tarifs sont présents. L'évolution quotidienne en DBU et le détail par jour, SKU et unité sont consultables et exportables en CSV.
+Cette règle remplace le premier suivi qui valorisait aussi le Warehouse en DBU. La valorisation des secondes est la convention demandée par le porteur du projet ; elle ne reconstitue pas la facture Databricks. Les durées de requêtes peuvent se chevaucher et ne couvrent pas tout le temps de fonctionnement du Warehouse. Un compute partagé comprend tous ses utilisateurs. Le **total du périmètre suivi** additionne les ressources sélectionnées, y compris les computes partagés, et ne doit donc pas être présenté comme le seul coût d'Enrob'Eau.
 
-Les réglages saisis sont conservés uniquement dans la session de l'administrateur. La lecture est manuelle, horodatée et conservée en mémoire dans cette session. Changer un tarif recalcule les montants sans relire la facturation ; changer de ressource, de période ou d'identité invalide les résultats précédents. Une erreur d'actualisation retire les anciens indicateurs. Il n'y a ni tâche planifiée, ni écriture dans les tables système, ni déploiement automatique.
+Les tarifs sont modifiables par ressource et s'appliquent à toute la période consultée, sans historique des changements de prix. Les calculs utilisent `Decimal` sans arrondi intermédiaire. Une absence de données ou une erreur n'est jamais convertie en coût nul ; un total incomplet est signalé comme partiel. Les corrections serveur `ORIGINAL`, `RETRACTION` et `RESTATEMENT` sont additionnées avec leur signe. Les durées manquantes, négatives ou les unités incompatibles ne produisent pas de faux coût complet.
 
-### Configuration persistante et accès
+### Parcours et périodes
 
-Les variables d'environnement suivantes préremplissent les réglages. En local, les mêmes clés sont acceptées dans `.streamlit/secrets.toml`, exclu de Git. Les variables d'environnement ont priorité. Ne pas committer les identifiants réels ni la configuration locale dans ce dépôt public.
+- **Ajouter** ouvre une fenêtre permettant de choisir serveur ou compute, puis de saisir le nom, l'identifiant et le tarif dans la bonne unité.
+- **Ressources suivies → Modifier** ouvre la fenêtre de modification du nom, de l'identifiant, du tarif et du caractère partagé du compute. Le type reste fixe pour éviter de changer implicitement l'unité. Les doublons d'identifiant par type et source sont refusés. Une modification concurrente est détectée.
+- Le filtre propose **depuis le début de l'année**, **année N−1**, **année N−2**, le mois en cours ou précédent, les 30 derniers jours et une période personnalisée de trois ans maximum. N suit l'année courante UTC ; N−1 et N−2 couvrent les années civiles complètes, y compris les années bissextiles.
+- Les montants serveur, compute et total sont visibles directement. **Graphiques** propose les coûts en euros, par mois ou jour, et la consommation d'une ressource en DBU ou secondes. **Tableaux** présente une synthèse, une répartition du compute par utilisateur et les lignes quotidiennes détaillées. Les exports CSV portent la source et la période ; les fichiers de démonstration sont nommés explicitement.
+
+### Jeu de démonstration
+
+Le mode **Démonstration**, sélectionné initialement, fonctionne sans lire les tables système Databricks. Les contrôles d'identité existants restent nécessaires. Deux ressources fictives sont initialisées, avec les tarifs 1 €/DBU et 0,90 €/h. Les comptes administrateurs du secours local peuvent consulter cette démonstration ; les lectures réelles restent refusées en mode de secours.
+
+Le fichier [finops_reference.json](data/exemples/finops_reference.json) reprend les valeurs lisibles des deux captures fournies le 17/10/2026, sans les noms, adresses e-mail, identifiants de comptes ou de ressources réels :
+
+- 16 consommations quotidiennes du serveur entre le 26/09 et le 14/10/2026 ; la ligne tronquée n'est pas reprise ;
+- 12 comptes compute anonymisés, totalisant **24 534 requêtes** et **398 513,00 secondes**, soit **99,62825 €** avant arrondi à 0,90 €/h.
+
+La capture compute ne comporte pas de dates. Le générateur [cost_monitoring_demo.py](services/cost_monitoring_demo.py) répartit ces totaux sur une **fenêtre fictive du 08 au 14/10/2026**. Cette répartition conserve exactement les secondes et le nombre de requêtes par compte sur la fenêtre. Les jours hors capture, les années antérieures et toutes les ressources supplémentaires sont **simulés**, avec des variations déterministes. Les valeurs serveur visibles restent inchangées pour le serveur de référence ; les lignes indiquent leur origine. Le bandeau de démonstration est permanent et les simulations ne sont jamais présentées comme un historique réel.
+
+### Configuration, persistance et droits
+
+Les suivis sont enregistrés dans `data/exemples/finops.sqlite3`, fichier local exclu de Git, partagé par les administrateurs de la même instance. Les suivis **Démonstration** et **Databricks** sont séparés. Les réglages survivent à une nouvelle session de cette instance, mais leur persistance après redéploiement n'est pas garantie : prévoir un emplacement durable dans un prochain lot. Aucun identifiant réel n'est versionné.
+
+Au premier chargement des suivis Databricks, les variables suivantes peuvent initialiser les deux ressources. Elles sont lues depuis l'environnement ou `.streamlit/secrets.toml` (environnement prioritaire). Les modifications ultérieures passent par les fenêtres de gestion ; les variables n'écrasent pas les suivis enregistrés.
 
 | Variable | Utilisation |
 | --- | --- |
-| `FINOPS_APP_ID` | Application à suivre ; obligatoire avant lecture. |
-| `FINOPS_WAREHOUSE_ID` | Warehouse à suivre ; utilise `DATABRICKS_WAREHOUSE_ID` par défaut. |
-| `FINOPS_APP_EUR_PER_DBU` | Tarif de référence application, défaut `1`. |
-| `FINOPS_SQL_EUR_PER_DBU` | Tarif SQL, vide par défaut. |
-| `FINOPS_WAREHOUSE_DEDICATED` | `false` par défaut ; `true` pour un Warehouse exclusif à Enrob'Eau. |
-| `FINOPS_USAGE_TABLE` | `system.billing.usage` par défaut, ou vue compatible à trois niveaux `catalog.schema.vue`. |
+| `FINOPS_APP_ID` | Identifiant initial du serveur App. Sans valeur, ajouter le suivi dans l'interface. |
+| `FINOPS_WAREHOUSE_ID` | Identifiant initial du compute ; utilise `DATABRICKS_WAREHOUSE_ID` par défaut. |
+| `FINOPS_APP_EUR_PER_DBU` | Tarif serveur initial, défaut `1`. |
+| `FINOPS_COMPUTE_EUR_PER_HOUR` | Tarif compute initial, défaut `0.9`. L'ancienne variable `FINOPS_SQL_EUR_PER_DBU` n'est plus utilisée ni convertie. |
+| `FINOPS_WAREHOUSE_DEDICATED` | `false` par défaut ; `true` pour initialiser un compute non partagé. |
+| `FINOPS_USAGE_TABLE` | Source serveur, défaut `system.billing.usage`, ou vue compatible à trois niveaux. |
+| `FINOPS_QUERY_HISTORY_TABLE` | Source compute, défaut `system.query.history`, ou vue compatible à trois niveaux. |
 
-La connexion utilise le mécanisme Databricks existant et l'identité du service principal de l'application, via `DATABRICKS_WAREHOUSE_ID`. Le Warehouse de connexion peut différer de la ressource suivie ; ses propres coûts ne sont alors pas inclus automatiquement. L'identité doit pouvoir utiliser le Warehouse de connexion et lire la source (privilèges `USE CATALOG`, `USE SCHEMA`, `SELECT` adaptés). La DSI peut fournir une vue restreinte aux ressources concernées plutôt qu'un accès à la facturation de tout le compte. Cette vue doit conserver `usage_metadata.app_id`, `usage_metadata.warehouse_id`, `usage_date`, `sku_name`, `usage_unit`, `usage_quantity`, `usage_end_time` et `ingestion_date`.
+La connexion réutilise le Warehouse `DATABRICKS_WAREHOUSE_ID` et l'identité du service principal de l'application. Celui-ci doit disposer des accès de connexion et de lecture appropriés (`USE CATALOG`, `USE SCHEMA`, `SELECT`). La DSI peut exposer des vues restreintes compatibles. Aucun workspace_id supplémentaire n'est demandé. Les dates SQL sont bornées en UTC ; le fuseau de la session de lecture est explicitement fixé à UTC.
 
-L'accès administrateur est revérifié côté service avant les lectures et avant de réafficher un résultat conservé en session. Le suivi réel est refusé en mode de secours SQLite ; il ne possède pas de données de démonstration intégrées. La gestion locale des comptes reste disponible selon son fonctionnement existant.
+Les droits administrateur sont contrôlés dans les services de configuration et de lecture, ainsi qu'avant l'affichage d'un résultat conservé en session. En mode Databricks, **Actualiser les consommations** lance une lecture par ressource. Les erreurs sont isolées : une ressource inaccessible ne masque pas les autres. Il n'existe pas de remplacement automatique par la démonstration. Le cache est limité à la session et indexé par identité, source, période et identifiants ; un changement de tarif recalcule sans relire les consommations. Les vérifications du profil peuvent toujours solliciter le Warehouse.
 
-### Interprétation et limites
+### Historique réel et limites
 
-- Les jours sont en **UTC**. La publication des consommations est différée, généralement sous 12 h ; la journée en cours peut être incomplète et des corrections peuvent arriver ultérieurement. Le tableau indique la dernière consommation reçue et la dernière ingestion par ressource. Il ne garantit pas la complétude de la période.
-- Les quantités signées sont additionnées, y compris les enregistrements `ORIGINAL`, `RETRACTION` et `RESTATEMENT`. Aucune suppression des rétractions ni plancher à zéro : une correction peut produire un montant négatif.
-- Une absence de données, de tarif ou de permission n'est jamais convertie en coût nul. Si une ressource présente une unité autre que DBU, sa valorisation est suspendue et le détail reste consultable.
-- **DBU reçues × tarif de référence = coût estimé**, sans extrapolation annuelle. Un tarif unique est appliqué par ressource à toute la période et à ses SKU ; ce n'est pas la reconstitution d'une facture avec prix historiques, remises ou conversion de devises. Alfresco, stockage, maintenance, marge interne et éventuels frais Azure séparés des DBU SQL sont hors périmètre.
-- **Activité SQL du Warehouse** est une lecture facultative de `system.query.history`, nécessitant ses propres droits. Elle compte les requêtes démarrées sur la période et additionne `execution_duration_ms`, tous utilisateurs et applications confondus. Cette durée peut chevaucher plusieurs requêtes et n'inclut pas tout le temps de fonctionnement facturé. Elle n'est donc jamais utilisée pour calculer un coût. Son indisponibilité ne bloque pas la facturation.
-- Ouvrir le suivi ne lance pas de requête de facturation ou d'historique ; les boutons de lecture peuvent démarrer le Warehouse. Les vérifications habituelles du profil restent nécessaires et peuvent aussi solliciter le Warehouse.
+La disponibilité de N−1 et N−2 dépend de la rétention du compte ou d'archives compatibles. Les deux tables système annoncent **365 jours de rétention par défaut**. La documentation décrit aussi une extension configurable en bêta selon les comptes ; elle n'est pas activée par l'application. Ne pas conclure qu'une année vide a coûté zéro. Ce lot ne crée ni archivage ni tâche de collecte. [Rétention des tables système Databricks](https://learn.microsoft.com/en-us/azure/databricks/admin/system-tables/).
 
-Sources des champs et règles : [table de consommation Databricks](https://learn.microsoft.com/en-us/azure/databricks/admin/system-tables/billing) et [historique SQL](https://learn.microsoft.com/en-us/azure/databricks/admin/system-tables/query-history).
+Les données sont publiées avec un délai, la journée en cours peut être incomplète et des corrections peuvent arriver ultérieurement. Alfresco, stockage, maintenance, marge interne et autres frais séparés ne sont pas inclus. Sources des champs : [consommation facturée](https://learn.microsoft.com/en-us/azure/databricks/admin/system-tables/billing) et [historique des requêtes](https://learn.microsoft.com/en-us/azure/databricks/admin/system-tables/query-history).
 
 ## Installation et lancement
 
@@ -615,7 +630,7 @@ Les tests de photos génèrent leurs images en mémoire et utilisent des dossier
 
 Les tests CODEX-003 couvrent les listes et obligations, la précision « Autre », le compteur conditionnel, la persistance des choix multiples, la lecture des anciens JSON, les exports, les liens et photos, la concurrence, les cinq sections, le géocodage simulé et la conservation des saisies au retour de l'éditeur photo. Les tests de widgets créant des brouillons utilisent un stockage temporaire pour ne pas consommer les compteurs du projet.
 
-Les tests FinOps couvrent les tarifs manquants, les unités, les corrections signées, la séparation d'un Warehouse partagé, les droits d'accès, les paramètres SQL, le cache par périmètre et les interactions du nouvel espace Administration. Les lectures Databricks sont simulées dans ces tests : la validation des permissions et du schéma réels doit être réalisée dans l'environnement Databricks.
+Les tests FinOps couvrent les deux formules (DBU et secondes), les années civiles, les corrections signées, les valeurs manquantes, les droits, les paramètres SQL, l'invalidation du cache, la persistance des suivis et les fenêtres d'ajout/modification. Ils vérifient aussi les totaux des captures anonymisées et la séparation de la démonstration et des données réelles. Les lectures Databricks sont simulées dans ces tests : la validation des permissions et du schéma réels doit être réalisée dans l'environnement Databricks.
 
 ### Tests automatiques sur GitHub
 

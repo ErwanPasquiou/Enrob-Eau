@@ -1,6 +1,7 @@
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -8,114 +9,148 @@ import pandas as pd
 from streamlit.testing.v1 import AppTest
 
 from services import cost_monitoring_service as finops
+from services import finops_resource_service as resources
+from services.cost_monitoring_demo import demo_usage, reference_data
 
 
 ROOT = Path(__file__).resolve().parents[1]
 ADMIN = dict(email="admin@example.test", prenom="Test", nom="Admin", actif=True, profil="administrateur")
-SETTINGS = dict(app_id="test-app", warehouse_id="test-warehouse", app_rate="1", sql_rate="", dedicated=False)
-COLUMNS = ["composant", "jour", "sku", "unite", "consommation", "derniere_consommation", "derniere_ingestion"]
+SERVER, COMPUTE = resources.DEMO_DEFAULTS
 
 
-def usage_frame():
-    return pd.DataFrame([
-        ["application", date(2026, 10, 1), "APP_SKU", "DBU", Decimal("12"), datetime(2026, 10, 2), date(2026, 10, 2)],
-        ["warehouse", date(2026, 10, 1), "SQL_SKU", "DBU", Decimal("20"), datetime(2026, 10, 2), date(2026, 10, 2)],
-    ], columns=COLUMNS)
+def frame(values=("12",), unit="DBU", missing=0):
+    return pd.DataFrame([[date(2026, 10, 1), "Détail", unit, value, 1, missing, "Test"] for value in values], columns=finops.COLUMNS)
 
 
-class CostCalculationTests(unittest.TestCase):
-    def test_shared_warehouse_never_increases_app_amount(self):
-        summary = finops.summarize_usage(usage_frame(), "1", "0.75")
-        self.assertEqual(summary["application"]["cost"], Decimal("12"))
-        self.assertEqual(summary["warehouse"]["cost"], Decimal("15"))
-        self.assertEqual(summary["attributable"], Decimal("12"))
+class CalculationTests(unittest.TestCase):
+    def test_server_dbu_and_compute_seconds_use_distinct_prices(self):
+        server = finops.summarize_resource(finops.price_usage(frame(), SERVER))
+        compute = finops.summarize_resource(finops.price_usage(frame(["300"], "s"), COMPUTE))
+        self.assertEqual(server["cost"], Decimal("12"))
+        self.assertEqual(compute["cost"], Decimal("0.075"))
+        self.assertEqual(finops.price_usage(frame(["3600"], "s"), COMPUTE).cout_eur[0], Decimal("0.9"))
 
-    def test_dedicated_total_requires_both_costs(self):
-        self.assertEqual(finops.summarize_usage(usage_frame(), 1, "0,75", True)["attributable"], Decimal("27"))
-        self.assertIsNone(finops.summarize_usage(usage_frame(), 1, "", True)["attributable"])
-        self.assertIsNone(finops.summarize_usage(usage_frame().iloc[:1], 1, 1, True)["attributable"])
+    def test_corrections_preserve_negative_net_and_no_intermediate_rounding(self):
+        priced = finops.price_usage(frame(["12", "-12", "10.1"]), dict(SERVER, rate="0.75"))
+        self.assertEqual(finops.summarize_resource(priced)["cost"], Decimal("7.575"))
+        self.assertEqual(finops.price_usage(frame(["-12"]), SERVER).cout_eur[0], Decimal("-12"))
 
-    def test_unknown_price_keeps_dbu_without_zero_cost(self):
-        item = finops.summarize_usage(usage_frame(), 1, None)["warehouse"]
-        self.assertEqual(item["dbu"], Decimal("20"))
-        self.assertIsNone(item["cost"])
+    def test_missing_or_wrong_units_do_not_become_free_usage(self):
+        for data in (frame([], "DBU"), frame([None]), frame(["12"], "s")):
+            summary = finops.summarize_resource(finops.price_usage(data, SERVER))
+            self.assertIsNone(summary["cost"])
+        self.assertTrue(finops.summarize_resource(finops.price_usage(frame(["300"], "s", 2), COMPUTE))["partial"])
 
-    def test_empty_period_is_not_free(self):
-        summary = finops.summarize_usage(pd.DataFrame(columns=COLUMNS), 1, 1)
-        self.assertIsNone(summary["application"]["dbu"])
-        self.assertIsNone(summary["attributable"])
+    def test_negative_compute_duration_is_rejected(self):
+        summary = finops.summarize_resource(finops.price_usage(frame(["-10"], "s"), COMPUTE))
+        self.assertIsNone(summary["cost"])
+        self.assertTrue(summary["partial"])
 
-    def test_corrections_and_negative_net_are_preserved(self):
-        frame = pd.concat([usage_frame().iloc[:1]] * 3, ignore_index=True)
-        frame["consommation"] = [Decimal("12"), Decimal("-12"), Decimal("10.1")]
-        self.assertEqual(finops.summarize_usage(frame, "0.75", None)["attributable"], Decimal("7.575"))
-        frame["consommation"] = [Decimal("-12"), Decimal("0"), Decimal("0")]
-        self.assertEqual(finops.summarize_usage(frame, 1, None)["attributable"], Decimal("-12"))
-
-    def test_different_units_are_never_summed_or_priced_as_dbu(self):
-        frame = pd.concat([usage_frame(), usage_frame().iloc[:1]], ignore_index=True)
-        frame.loc[2, "unite"] = "GB"
-        item = finops.summarize_usage(frame, 1, 1)["application"]
-        self.assertTrue(item["unsupported_unit"])
-        self.assertIsNone(item["cost"])
-
-    def test_invalid_values_are_rejected_and_explicit_free_price_allowed(self):
-        for value in ("-1", "NaN", "Infinity", "oops"):
+    def test_rates_accept_comma_and_zero_but_not_invalid_values(self):
+        self.assertEqual(finops.parse_rate("0,90"), Decimal("0.90"))
+        self.assertEqual(finops.parse_rate("0"), 0)
+        for value in ("", None, "-1", "NaN", "Infinity", "texte"):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 finops.parse_rate(value)
-        self.assertEqual(finops.summarize_usage(usage_frame(), 0, None)["attributable"], 0)
-        frame = usage_frame()
-        frame.loc[0, "consommation"] = None
+
+    def test_annual_periods_include_leap_day_and_current_year_stops_today(self):
+        today = date(2026, 10, 17)
+        self.assertEqual(finops.period_dates("year", today), (date(2026, 1, 1), today))
+        self.assertEqual(finops.period_dates("previous_year", today), (date(2025, 1, 1), date(2025, 12, 31)))
+        start, end = finops.period_dates("two_years_ago", today)
+        self.assertEqual((end - start).days + 1, 366)
+        self.assertEqual(finops.period_dates("previous_month", date(2024, 3, 1)), (date(2024, 2, 1), date(2024, 2, 29)))
+
+    def test_period_and_identifier_validation(self):
         with self.assertRaises(ValueError):
-            finops.summarize_usage(frame, 1, 1)
+            finops.validate_period(date(2026, 10, 2), date(2026, 10, 1))
+        with self.assertRaises(ValueError):
+            finops.validate_period(date(2022, 1, 1), date(2026, 1, 1))
+        for values in (dict(SERVER, name=""), dict(SERVER, external_id="' OR 1=1"), dict(SERVER, kind="other")):
+            with self.assertRaises(ValueError):
+                finops.validate_resource(values)
 
 
-class MonitoringQueryTests(unittest.TestCase):
-    def setUp(self):
-        self.scope = finops.MonitoringScope("test-app", "test-warehouse", date(2026, 10, 1), date(2026, 10, 17))
+class ReferenceDatasetTests(unittest.TestCase):
+    def test_reference_compute_totals_and_cost(self):
+        reference = reference_data()
+        self.assertEqual(sum(Decimal(row["seconds"]) for row in reference["compute_totals"]), Decimal("398513.00"))
+        self.assertEqual(sum(row["queries"] for row in reference["compute_totals"]), 24534)
+        data = demo_usage(COMPUTE, date(2026, 10, 8), date(2026, 10, 14))
+        self.assertEqual(data.consommation.sum(), Decimal("398513.00"))
+        self.assertEqual(data.nombre_requetes.sum(), 24534)
+        self.assertEqual(finops.summarize_resource(finops.price_usage(data, COMPUTE))["cost"], Decimal("99.62825"))
+        self.assertTrue(data.origine.str.contains("fictives").all())
+        for actor in reference["compute_totals"]:
+            subset = data.loc[data.detail == actor["actor"]]
+            self.assertEqual(subset.consommation.sum(), Decimal(actor["seconds"]))
+            self.assertEqual(subset.nombre_requetes.sum(), actor["queries"])
 
-    def test_scope_rejects_invalid_dates_and_sql_identifier(self):
-        for scope in (
-            finops.MonitoringScope("app' OR 1=1", "warehouse", self.scope.start, self.scope.end),
-            finops.MonitoringScope("app", "warehouse", self.scope.end, self.scope.start),
-            finops.MonitoringScope("app", "warehouse", date(2024, 1, 1), date(2025, 1, 1)),
-            finops.MonitoringScope("app", "warehouse", self.scope.start, self.scope.end, "system.billing.usage;DROP"),
-        ):
-            with self.subTest(scope=scope), self.assertRaises(ValueError):
-                scope.validate()
+    def test_every_visible_server_reference_is_preserved(self):
+        for day, quantity in reference_data()["server_daily_dbu"]:
+            result = demo_usage(SERVER, date.fromisoformat(day), date.fromisoformat(day))
+            self.assertEqual(result.consommation[0], Decimal(quantity))
+            self.assertEqual(result.origine[0], "Capture serveur")
 
-    def test_billing_query_binds_resources_and_retains_all_corrections(self):
-        with patch.object(finops, "authorize_monitoring"), patch.object(finops, "_read", return_value=usage_frame()) as read:
-            finops.load_usage(self.scope)
+    def test_historical_and_added_resource_rows_are_explicitly_simulated(self):
+        result = demo_usage(SERVER, date(2024, 1, 1), date(2024, 12, 31))
+        self.assertEqual(len(result), 366)
+        self.assertTrue(result.origine.eq("Historique simulé").all())
+        other = demo_usage(dict(SERVER, external_id="another-demo-server"), date(2026, 10, 14), date(2026, 10, 14))
+        self.assertEqual(other.origine[0], "Historique simulé")
+
+    def test_data_is_deterministic_and_contains_no_real_identities(self):
+        first = demo_usage(COMPUTE, date(2025, 1, 1), date(2025, 1, 31))
+        pd.testing.assert_frame_equal(first, demo_usage(COMPUTE, date(2025, 1, 1), date(2025, 1, 31)))
+        text = str(reference_data())
+        self.assertNotIn("@", text)
+        self.assertNotIn("executed_by_user_id", text)
+        self.assertTrue((first.loc[first.consommation > 0, "nombre_requetes"] > 0).all())
+
+
+class QueryTests(unittest.TestCase):
+    def test_server_reads_only_billing_and_keeps_all_record_types(self):
+        with patch.object(finops, "authorize_monitoring"), patch.object(finops, "_read", return_value=frame()) as read:
+            finops.load_resource_usage(SERVER, date(2026, 1, 1), date(2026, 10, 17), "live")
         query, parameters = read.call_args.args
-        self.assertNotIn("test-app", query)
-        self.assertNotIn("record_type", query)
-        self.assertIn("SUM(usage_quantity)", query)
         self.assertIn("`system`.`billing`.`usage`", query)
-        self.assertEqual(parameters, ["test-app", self.scope.start, self.scope.end, "test-app", "test-warehouse"])
+        self.assertNotIn("system.query", query)
+        self.assertNotIn("record_type", query)
+        self.assertNotIn(SERVER["external_id"], query)
+        self.assertEqual(parameters, [SERVER["external_id"], date(2026, 1, 1), date(2026, 10, 17)])
 
-    def test_sql_activity_uses_exclusive_next_day_boundary(self):
-        with patch.object(finops, "authorize_monitoring"), patch.object(finops, "_read") as read:
-            finops.load_sql_activity(self.scope)
+    def test_compute_reads_query_seconds_with_utc_boundaries(self):
+        with patch.object(finops, "authorize_monitoring"), patch.object(finops, "_read", return_value=frame(["300"], "s")) as read:
+            finops.load_resource_usage(COMPUTE, date(2024, 1, 1), date(2024, 12, 31), "live")
         query, parameters = read.call_args.args
-        self.assertIn("execution_duration_ms", query)
-        self.assertEqual(parameters, ["test-warehouse", "2026-10-01T00:00:00Z", "2026-10-18T00:00:00Z"])
+        self.assertIn("`system`.`query`.`history`", query)
+        self.assertIn("SUM(execution_duration_ms) / 1000.0", query)
+        self.assertIn("COUNT(*)", query)
+        self.assertNotIn("billing", query)
+        self.assertEqual(parameters, [COMPUTE["external_id"], "2024-01-01T00:00:00Z", "2025-01-01T00:00:00Z"])
 
-    def test_non_admin_and_fallback_never_query_billing_or_activity(self):
-        with patch.object(finops, "get_connection") as connection:
-            for method in (finops.load_usage, finops.load_sql_activity):
-                with patch.object(finops, "require_admin", side_effect=PermissionError("Refusé")), self.assertRaises(PermissionError):
-                    method(self.scope)
-                with patch.object(finops, "require_admin", return_value=ADMIN), patch.object(finops, "is_local_mode", return_value=True), self.assertRaises(finops.MonitoringUnavailable):
-                    method(self.scope)
+    def test_sources_are_validated_before_query(self):
+        with patch.object(finops, "authorize_monitoring"), patch.object(finops, "_read") as read:
+            with self.assertRaises(ValueError):
+                finops.load_resource_usage(SERVER, date(2026, 1, 1), date(2026, 1, 2), "live", "source;DROP")
+            read.assert_not_called()
+
+    def test_demo_never_connects_and_real_fallback_is_denied(self):
+        with patch.object(finops, "require_admin", return_value=ADMIN), patch.object(finops, "is_local_mode", return_value=True), patch.object(finops, "get_connection") as connection:
+            result = finops.load_resource_usage(SERVER, date(2026, 1, 1), date(2026, 1, 2), "demo")
+            self.assertEqual(len(result), 2)
+            with self.assertRaises(finops.MonitoringUnavailable):
+                finops.load_resource_usage(SERVER, date(2026, 1, 1), date(2026, 1, 2), "live")
             connection.assert_not_called()
 
-    def test_connection_failure_is_not_an_empty_consumption(self):
-        with patch.object(finops, "get_connection", side_effect=RuntimeError("secret connection details")), self.assertRaises(finops.MonitoringUnavailable) as caught:
-            finops._read("SELECT 1", [])
-        self.assertNotIn("secret", str(caught.exception))
+    def test_non_admin_cannot_read_either_mode(self):
+        with patch.object(finops, "require_admin", side_effect=PermissionError("Refusé")), patch.object(finops, "get_connection") as connection:
+            for mode in ("demo", "live"):
+                with self.assertRaises(PermissionError):
+                    finops.load_resource_usage(SERVER, date(2026, 1, 1), date(2026, 1, 2), mode)
+            connection.assert_not_called()
 
-    def test_connector_decimal_result_is_preserved(self):
+    def test_connection_sets_utc_and_preserves_decimal(self):
         connection = MagicMock()
         cursor = connection.__enter__.return_value.cursor.return_value.__enter__.return_value
         cursor.description = [("consommation",)]
@@ -123,106 +158,175 @@ class MonitoringQueryTests(unittest.TestCase):
         with patch.object(finops, "get_connection", return_value=connection):
             result = finops._read("SELECT ?", [1])
         self.assertEqual(result.iloc[0, 0], Decimal("1.123456789"))
-        cursor.execute.assert_called_once_with("SELECT ?", [1])
+        self.assertEqual(cursor.execute.call_args_list[0].args, ("SET TIME ZONE 'UTC'",))
+        self.assertEqual(cursor.execute.call_args_list[1].args, ("SELECT ?", [1]))
+
+    def test_errors_do_not_return_empty_data_or_expose_connection_details(self):
+        with patch.object(finops, "get_connection", side_effect=RuntimeError("sensitive-detail")), self.assertRaises(finops.MonitoringUnavailable) as caught:
+            finops._read("SELECT 1", [])
+        self.assertNotIn("sensitive-detail", str(caught.exception))
 
 
-class MonitoringInterfaceTests(unittest.TestCase):
+class ResourceFixture(unittest.TestCase):
     def setUp(self):
-        for patcher in (
-            patch.object(finops, "authorize_monitoring", return_value=ADMIN),
-            patch("components.cost_monitoring._setting", side_effect=lambda name, default="": default),
-        ):
+        temporary = TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        for patcher in (patch.object(resources, "DATABASE_PATH", Path(temporary.name) / "finops.sqlite3"), patch.object(resources, "require_admin", return_value=ADMIN)):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+
+class ResourceTests(ResourceFixture):
+    def test_add_edit_persist_and_keep_modes_separate(self):
+        self.assertEqual(len(resources.list_resources("demo")), 2)
+        self.assertEqual(resources.list_resources("live"), [])
+        created = resources.save_resource("demo", dict(SERVER, name="Second serveur", external_id="second"))
+        row = next(row for row in resources.list_resources("demo") if row["id"] == created)
+        resources.save_resource("demo", dict(row, external_id="changed", rate="1,25"), created, row["version"])
+        updated = next(row for row in resources.list_resources("demo") if row["id"] == created)
+        self.assertEqual(updated["rate"], "1.25")
+        self.assertEqual(updated["external_id"], "changed")
+        self.assertEqual(updated["version"], 2)
+        self.assertEqual(len(resources.list_resources("demo")), 3)
+        self.assertEqual(resources.list_resources("live"), [])
+
+    def test_duplicate_and_stale_edits_are_rejected_without_losing_data(self):
+        row = resources.list_resources("demo")[0]
+        with self.assertRaises(ValueError):
+            resources.save_resource("demo", row)
+        resources.save_resource("demo", dict(row, rate="2"), row["id"], row["version"])
+        with self.assertRaises(ValueError):
+            resources.save_resource("demo", dict(row, rate="3"), row["id"], row["version"])
+        self.assertEqual(next(r for r in resources.list_resources("demo") if r["id"] == row["id"])["rate"], "2")
+
+    def test_mode_and_type_cannot_be_changed_by_an_edit(self):
+        row = resources.list_resources("demo")[0]
+        with self.assertRaises(ValueError):
+            resources.save_resource("live", row, row["id"], row["version"])
+        with self.assertRaises(ValueError):
+            resources.save_resource("demo", dict(row, kind="compute" if row["kind"] == "serveur" else "serveur"), row["id"], row["version"])
+
+    def test_settings_require_admin_for_reads_and_writes(self):
+        with patch.object(resources, "require_admin", side_effect=PermissionError("Refusé")):
+            with self.assertRaises(PermissionError):
+                resources.list_resources("demo")
+            with self.assertRaises(PermissionError):
+                resources.save_resource("demo", SERVER)
+        self.assertFalse(resources.DATABASE_PATH.exists())
+
+
+class MonitoringInterfaceTests(ResourceFixture):
+    def setUp(self):
+        super().setUp()
+        for patcher in (patch.object(finops, "require_admin", return_value=ADMIN), patch.object(finops, "is_local_mode", return_value=False),
+                        patch("components.cost_monitoring._setting", side_effect=lambda name, default="": default)):
             patcher.start()
             self.addCleanup(patcher.stop)
         self.app = AppTest.from_file(str(ROOT / "pages/administration.py"))
         self.app.session_state["current_user"] = ADMIN.copy()
         self.app.session_state["admin_section"] = "Consommation et coûts"
-        self.app.session_state["finops_settings"] = SETTINGS.copy()
 
-    def test_monitoring_does_not_load_user_list_or_automatically_query_usage(self):
-        with patch("components.administration_users.get_administration_users", side_effect=AssertionError("Users must stay independent")), patch.object(finops, "load_usage") as load:
-            self.app.run()
+    def test_demo_has_metrics_graphs_tables_without_databricks(self):
+        with patch.object(finops, "get_connection", side_effect=AssertionError("No Databricks")):
+            self.app.run(timeout=30)
         self.assertFalse(self.app.exception)
-        load.assert_not_called()
-        self.assertTrue(self.app.button(key="finops_refresh"))
+        self.assertEqual(len(self.app.metric), 3)
+        self.assertTrue(any("DÉMONSTRATION" in warning.value for warning in self.app.warning))
+        self.assertEqual([tab.label for tab in self.app.tabs], ["Graphiques", "Tableaux"])
+        self.assertEqual(len(self.app.dataframe), 3)
 
-    def test_refresh_displays_unknown_sql_price_and_caches_until_requested(self):
-        with patch.object(finops, "load_usage", return_value=usage_frame()) as load:
-            self.app.run().button(key="finops_refresh").click().run()
-            self.assertFalse(self.app.exception)
-            values = [metric.value for metric in self.app.metric]
-            self.assertEqual(values, ["12,00 €", "Non disponible", "12,00 €"])
+    def test_switching_year_changes_actual_rows_and_includes_leap_year(self):
+        self.app.run(timeout=30).selectbox(key="finops_v2_period").select("two_years_ago").run(timeout=30)
+        self.assertFalse(self.app.exception)
+        detail = self.app.dataframe[-1].value
+        expected_year = date.today().year - 2
+        self.assertTrue(all(day.year == expected_year for day in detail["Jour UTC"]))
+
+    def test_add_popup_persists_a_third_followed_resource(self):
+        self.app.run(timeout=30).button(key="finops_add").click().run()
+        self.assertFalse(self.app.exception)
+        self.app.text_input[0].set_value("Second serveur")
+        self.app.text_input[1].set_value("DEMO-SECOND")
+        next(b for b in self.app.button if b.label == "Enregistrer").click().run(timeout=30)
+        self.assertFalse(self.app.exception)
+        self.assertEqual(len(resources.list_resources("demo")), 3)
+        self.assertEqual(len(self.app.dataframe[0].value), 3)
+
+    def test_edit_popup_recalculates_rate_and_changes_identifier(self):
+        row = resources.list_resources("demo")[0]
+        self.app.run(timeout=30)
+        previous = self.app.dataframe[0].value.iloc[0]["Coût estimé (€)"]
+        self.app.button(key=f"finops_edit_{row['id']}").click().run()
+        self.app.text_input[2].set_value("2")
+        next(b for b in self.app.button if b.label == "Enregistrer").click().run(timeout=30)
+        self.assertFalse(self.app.exception)
+        self.assertAlmostEqual(self.app.dataframe[0].value.iloc[0]["Coût estimé (€)"], previous * 2)
+        row = resources.list_resources("demo")[0]
+        self.app.button(key=f"finops_edit_{row['id']}").click().run()
+        self.app.text_input[1].set_value("OTHER-SERVER")
+        next(b for b in self.app.button if b.label == "Enregistrer").click().run(timeout=30)
+        self.assertFalse(self.app.exception)
+        self.assertEqual(resources.list_resources("demo")[0]["external_id"], "OTHER-SERVER")
+
+    def test_live_is_manual_and_never_reuses_demo_snapshot(self):
+        resources.list_resources("live", [SERVER, COMPUTE])
+        with patch.object(finops, "_read", return_value=frame()) as read:
+            self.app.run(timeout=30).radio(key="finops_source").set_value("Databricks").run()
+            read.assert_not_called()
+            self.assertFalse(self.app.metric)
+            self.app.button(key="finops_refresh").click().run(timeout=30)
+            self.assertEqual(read.call_count, 2)
             self.app.run()
-            load.assert_called_once()
+            self.assertEqual(read.call_count, 2)
 
-    def test_changing_tariff_recalculates_without_querying(self):
-        with patch.object(finops, "load_usage", return_value=usage_frame()) as load:
-            self.app.run().button(key="finops_refresh").click().run()
-            self.app.text_input[3].set_value("0,75")
-            self.app.checkbox[0].check()
-            self.app.button[0].click().run()
-            self.assertFalse(self.app.exception)
-            self.assertEqual([m.value for m in self.app.metric], ["12,00 €", "15,00 €", "27,00 €"])
-            load.assert_called_once()
+    def test_partial_failure_keeps_other_resource_and_marks_partial_total(self):
+        resources.list_resources("live", [SERVER, COMPUTE])
+        self.app.session_state["finops_source"] = "Databricks"
+        with patch.object(finops, "_read", side_effect=[frame(), finops.MonitoringUnavailable("Compute indisponible")]):
+            self.app.run().button(key="finops_refresh").click().run(timeout=30)
+        self.assertFalse(self.app.exception)
+        self.assertEqual([m.value for m in self.app.metric], ["12,00 €", "Non disponible", "12,00 €"])
+        self.assertIn("partiel", self.app.metric[2].label)
 
-    def test_resource_and_period_changes_never_reuse_other_snapshot(self):
-        with patch.object(finops, "load_usage", return_value=usage_frame()):
-            self.app.run().button(key="finops_refresh").click().run()
-            self.app.selectbox(key="finops_period").select("Mois précédent").run()
-            self.assertFalse(self.app.metric)
-            self.app.button(key="finops_refresh").click().run()
-            self.app.text_input[0].set_value("other-app")
-            self.app.button[0].click().run()
-            self.assertFalse(self.app.metric)
-
-    def test_refresh_failure_removes_old_metrics(self):
-        with patch.object(finops, "load_usage", side_effect=[usage_frame(), finops.MonitoringUnavailable("Accès indisponible")]):
-            self.app.run().button(key="finops_refresh").click().run()
+    def test_failure_after_refresh_does_not_leave_old_amounts(self):
+        resources.list_resources("live", [SERVER])
+        self.app.session_state["finops_source"] = "Databricks"
+        with patch.object(finops, "_read", side_effect=[frame(), finops.MonitoringUnavailable("Indisponible")]):
+            self.app.run().button(key="finops_refresh").click().run(timeout=30)
             self.app.button(key="finops_refresh").click().run()
         self.assertFalse(self.app.exception)
+        self.assertTrue(all(m.value == "Non disponible" for m in self.app.metric))
+
+    def test_non_admin_and_lost_permission_hide_data(self):
+        self.app.run(timeout=30)
+        with patch.object(finops, "require_admin", side_effect=PermissionError("Droits retirés")):
+            self.app.run()
         self.assertFalse(self.app.metric)
         self.assertTrue(self.app.error)
-
-    def test_lost_permission_hides_cached_data(self):
-        with patch.object(finops, "load_usage", return_value=usage_frame()):
-            self.app.run().button(key="finops_refresh").click().run()
-        with patch.object(finops, "authorize_monitoring", side_effect=PermissionError("Droits retirés")):
-            self.app.run()
-        self.assertFalse(self.app.metric)
-        self.assertTrue(self.app.warning)
-
-    def test_no_data_and_activity_error_are_independent(self):
-        with patch.object(finops, "load_usage", return_value=pd.DataFrame(columns=COLUMNS)), patch.object(finops, "load_sql_activity", side_effect=finops.MonitoringUnavailable("Historique inaccessible")):
-            self.app.run().button(key="finops_refresh").click().run()
-            self.app.button(key="finops_load_activity").click().run()
-        self.assertFalse(self.app.exception)
-        self.assertEqual([m.value for m in self.app.metric], ["Non disponible"] * 3)
-        self.assertTrue(self.app.error)
-
-    def test_execution_seconds_do_not_create_a_compute_cost(self):
-        activity = pd.DataFrame([dict(nombre_requetes=50, secondes_execution=Decimal("300"))])
-        with patch.object(finops, "load_usage", return_value=usage_frame()), patch.object(finops, "load_sql_activity", return_value=activity):
-            self.app.run().button(key="finops_refresh").click().run()
-            self.app.button(key="finops_load_activity").click().run()
-        self.assertFalse(self.app.exception)
-        self.assertEqual([m.value for m in self.app.metric], ["12,00 €", "Non disponible", "12,00 €", "50", "300,00 s"])
-
-    def test_identity_change_clears_snapshot(self):
-        with patch.object(finops, "load_usage", return_value=usage_frame()):
-            self.app.run().button(key="finops_refresh").click().run()
-        with patch.object(finops, "authorize_monitoring", return_value=dict(ADMIN, email="other@example.test")):
-            self.app.run()
-        self.assertFalse(self.app.metric)
-
-    def test_missing_configuration_and_non_admin_route(self):
-        self.app.session_state["finops_settings"] = dict(SETTINGS, app_id="")
-        self.app.run()
-        self.assertFalse(self.app.exception)
-        self.assertFalse(self.app.metric)
         self.app.session_state["current_user"] = dict(ADMIN, profil="agent")
         self.app.run()
-        self.assertTrue(self.app.error)
-        self.assertFalse(self.app.text_input)
+        self.assertFalse(self.app.radio)
+
+    def test_custom_dates_and_empty_selection_are_handled(self):
+        self.app.run(timeout=30).selectbox(key="finops_v2_period").select("custom").run()
+        self.assertFalse(self.app.exception)
+        self.assertEqual(len(self.app.date_input), 2)
+        self.app.multiselect[0].set_value([]).run()
+        self.assertFalse(self.app.exception)
+        self.assertFalse(self.app.metric)
+
+    def test_identity_change_and_period_change_invalidate_real_snapshot(self):
+        resources.list_resources("live", [SERVER])
+        self.app.session_state["finops_source"] = "Databricks"
+        with patch.object(finops, "_read", return_value=frame()):
+            self.app.run().button(key="finops_refresh").click().run(timeout=30)
+        with patch.object(finops, "require_admin", return_value=dict(ADMIN, email="other@example.test")):
+            self.app.run()
+        self.assertFalse(self.app.metric)
+        with patch.object(finops, "_read", return_value=frame()):
+            self.app.button(key="finops_refresh").click().run(timeout=30)
+        self.app.selectbox(key="finops_v2_period").select("previous_year").run()
+        self.assertFalse(self.app.metric)
 
 
 if __name__ == "__main__":

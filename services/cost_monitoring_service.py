@@ -1,5 +1,4 @@
-"""Lecture FinOps et valorisation indicative, sans écriture Databricks."""
-from dataclasses import dataclass
+"""Suivi multi-ressources : DBU serveur et secondes d'exécution compute."""
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 import re
@@ -11,139 +10,153 @@ from services.administration_service import get_connection
 from services.auth_service import require_admin
 
 
+COLUMNS = ["jour", "detail", "unite", "consommation", "nombre_requetes", "manquantes", "origine"]
+KINDS = {"serveur": "Serveur App", "compute": "Compute SQL"}
+
+
 class MonitoringUnavailable(RuntimeError):
-    """La consommation ne peut pas être consultée ; ce n'est pas un coût nul."""
+    """Une indisponibilité ne représente pas une consommation nulle."""
 
 
-@dataclass(frozen=True)
-class MonitoringScope:
-    app_id: str
-    warehouse_id: str
-    start: date
-    end: date
-    usage_table: str = "system.billing.usage"
-
-    def validate(self):
-        for value in (self.app_id, self.warehouse_id):
-            if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", value):
-                raise ValueError("Renseignez les identifiants de l’application et du Warehouse.")
-        if self.start > self.end:
-            raise ValueError("La date de début doit précéder la date de fin.")
-        if (self.end - self.start).days >= 366:
-            raise ValueError("Choisissez une période de 366 jours maximum.")
-        if not re.fullmatch(r"[A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+", self.usage_table):
-            raise ValueError("La source de facturation doit être une table ou vue catalog.schema.nom.")
-
-
-def authorize_monitoring():
-    """Contrôle aussi les lectures en cache, et refuse l'identité de secours."""
+def authorize_monitoring(real=True):
     user = require_admin()
-    if is_local_mode():
-        raise MonitoringUnavailable(
-            "Le suivi réel est indisponible en mode de secours local. "
-            "Reconnectez l’administration à Databricks pour consulter les consommations."
-        )
+    if real and is_local_mode():
+        raise MonitoringUnavailable("Le suivi Databricks est indisponible en mode de secours local. Le jeu de démonstration reste accessible aux administrateurs.")
     return user
+
+
+def parse_rate(value):
+    if value is None or str(value).strip() == "":
+        raise ValueError("Renseignez le tarif de la ressource.")
+    try:
+        rate = Decimal(str(value).strip().replace(",", "."))
+    except InvalidOperation as exc:
+        raise ValueError("Le tarif doit être un nombre positif ou nul.") from exc
+    if not rate.is_finite() or rate < 0 or rate > Decimal("1000000"):
+        raise ValueError("Le tarif doit être compris entre 0 et 1 000 000.")
+    return rate
+
+
+def validate_resource(resource):
+    name = str(resource.get("name", "")).strip()
+    external_id = str(resource.get("external_id", "")).strip()
+    if not name or len(name) > 80:
+        raise ValueError("Donnez un nom à la ressource (80 caractères maximum).")
+    if resource.get("kind") not in KINDS:
+        raise ValueError("Choisissez un serveur ou un compute.")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", external_id):
+        raise ValueError("Renseignez un identifiant valide (lettres, chiffres, tirets et underscores).")
+    return dict(name=name, external_id=external_id, kind=resource["kind"],
+                rate=str(parse_rate(resource.get("rate"))), shared=bool(resource.get("shared", False)) if resource["kind"] == "compute" else False)
+
+
+def validate_period(start, end):
+    if start > end:
+        raise ValueError("La date de début doit précéder la date de fin.")
+    if (end - start).days >= 1096:
+        raise ValueError("Choisissez une période de trois ans maximum.")
+
+
+def period_dates(period, today):
+    if period in ("year", "previous_year", "two_years_ago"):
+        year = today.year - {"year": 0, "previous_year": 1, "two_years_ago": 2}[period]
+        return date(year, 1, 1), today if period == "year" else date(year, 12, 31)
+    if period == "previous_month":
+        end = today.replace(day=1) - timedelta(days=1)
+        return end.replace(day=1), end
+    if period == "30_days":
+        return today - timedelta(days=29), today
+    return today.replace(day=1), today
+
+
+def _table_name(value):
+    if not re.fullmatch(r"[A-Za-z0-9_]+\.[A-Za-z0-9_]+\.[A-Za-z0-9_]+", value):
+        raise ValueError("La source doit être une table ou vue catalog.schema.nom.")
+    return ".".join(f"`{part}`" for part in value.split("."))
 
 
 def _read(query, parameters):
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
+                cursor.execute("SET TIME ZONE 'UTC'")
                 cursor.execute(query, parameters)
                 rows = cursor.fetchall()
                 columns = [column[0] for column in cursor.description]
         return pd.DataFrame.from_records([tuple(row) for row in rows], columns=columns)
     except Exception as exc:
-        raise MonitoringUnavailable(
-            "Lecture Databricks indisponible. Vérifiez la connexion et les droits de "
-            "l’identité de l’application sur la source demandée. Aucun coût n’a été calculé."
-        ) from exc
+        raise MonitoringUnavailable("Lecture Databricks indisponible : vérifiez la connexion et les droits de l’application sur la source de cette ressource.") from exc
 
 
-def load_usage(scope: MonitoringScope):
-    authorize_monitoring()
-    scope.validate()
-    table = ".".join(f"`{part}`" for part in scope.usage_table.split("."))
-    # Les rétractions sont négatives : conserver TOUS les record_type pour
-    # compenser l'original avant d'ajouter un éventuel RESTATEMENT.
-    query = f"""
-        SELECT
-            CASE WHEN usage_metadata.app_id = ? THEN 'application'
-                 ELSE 'warehouse' END AS composant,
-            usage_date AS jour,
-            sku_name AS sku,
-            usage_unit AS unite,
-            SUM(usage_quantity) AS consommation,
-            MAX(usage_end_time) AS derniere_consommation,
-            MAX(ingestion_date) AS derniere_ingestion
-        FROM {table}
-        WHERE usage_date BETWEEN ? AND ?
-          AND (usage_metadata.app_id = ? OR usage_metadata.warehouse_id = ?)
-        GROUP BY 1, 2, 3, 4
-        ORDER BY jour, composant, sku
-    """
-    return _read(query, [scope.app_id, scope.start, scope.end, scope.app_id, scope.warehouse_id])
+def load_resource_usage(resource, start, end, mode, usage_table="system.billing.usage", history_table="system.query.history"):
+    if mode not in ("demo", "live"):
+        raise ValueError("Source de données inconnue.")
+    authorize_monitoring(real=mode == "live")
+    resource = validate_resource(resource)
+    validate_period(start, end)
+    if mode == "demo":
+        from services.cost_monitoring_demo import demo_usage
+        return demo_usage(resource, start, end)
+    if resource["kind"] == "serveur":
+        # Conserver ORIGINAL, RETRACTION et RESTATEMENT et leurs signes.
+        query = f"""
+            SELECT usage_date AS jour, sku_name AS detail, usage_unit AS unite,
+                   SUM(usage_quantity) AS consommation,
+                   0 AS nombre_requetes, 0 AS manquantes
+            FROM {_table_name(usage_table)}
+            WHERE usage_metadata.app_id = ? AND usage_date BETWEEN ? AND ?
+            GROUP BY usage_date, sku_name, usage_unit
+            ORDER BY jour, detail
+        """
+        parameters = [resource["external_id"], start, end]
+    else:
+        query = f"""
+            SELECT CAST(start_time AS DATE) AS jour,
+                   COALESCE(executed_by, 'Utilisateur non renseigné') AS detail,
+                   's' AS unite,
+                   SUM(execution_duration_ms) / 1000.0 AS consommation,
+                   COUNT(*) AS nombre_requetes,
+                   SUM(CASE WHEN execution_duration_ms IS NULL THEN 1 ELSE 0 END) AS manquantes
+            FROM {_table_name(history_table)}
+            WHERE compute.warehouse_id = ?
+              AND start_time >= CAST(? AS TIMESTAMP)
+              AND start_time < CAST(? AS TIMESTAMP)
+            GROUP BY CAST(start_time AS DATE), executed_by
+            ORDER BY jour, detail
+        """
+        parameters = [resource["external_id"], f"{start.isoformat()}T00:00:00Z", f"{(end + timedelta(days=1)).isoformat()}T00:00:00Z"]
+    frame = _read(query, parameters)
+    frame["origine"] = "Databricks"
+    return frame
 
 
-def load_sql_activity(scope: MonitoringScope):
-    authorize_monitoring()
-    scope.validate()
-    # Durée des requêtes démarrées dans la période UTC ; ne mesure ni le temps
-    # de fonctionnement facturé du Warehouse, ni un usage exclusif Enrob'Eau.
-    query = """
-        SELECT COUNT(*) AS nombre_requetes,
-               SUM(execution_duration_ms) / 1000.0 AS secondes_execution
-        FROM system.query.history
-        WHERE compute.warehouse_id = ?
-          AND start_time >= CAST(? AS TIMESTAMP)
-          AND start_time < CAST(? AS TIMESTAMP)
-    """
-    return _read(query, [
-        scope.warehouse_id,
-        f"{scope.start.isoformat()}T00:00:00Z",
-        f"{(scope.end + timedelta(days=1)).isoformat()}T00:00:00Z",
-    ])
-
-
-def parse_rate(value):
-    """None signifie tarif inconnu, 0 reste un tarif explicite valide."""
-    if value is None or str(value).strip() == "":
-        return None
-    try:
-        rate = Decimal(str(value).strip().replace(",", "."))
-    except InvalidOperation as exc:
-        raise ValueError("Les tarifs doivent être des montants positifs en €/DBU.") from exc
-    if not rate.is_finite() or rate < 0:
-        raise ValueError("Les tarifs doivent être des montants positifs en €/DBU.")
-    return rate
-
-
-def summarize_usage(frame, app_rate, sql_rate, dedicated=False):
-    """Aucun remplissage des jours absents ; coût de la consommation reçue seulement."""
-    rates = {"application": parse_rate(app_rate), "warehouse": parse_rate(sql_rate)}
-    result = {}
-    for component, rate in rates.items():
-        rows = frame.loc[frame["composant"] == component] if not frame.empty else frame
-        present = not rows.empty
-        dbu_only = present and rows["unite"].eq("DBU").all()
-        quantities = []
-        if dbu_only:
-            for value in rows["consommation"]:
-                try:
-                    quantity = Decimal(str(value))
-                except InvalidOperation as exc:
-                    raise ValueError("Une consommation reçue est invalide.") from exc
-                if not quantity.is_finite():
-                    raise ValueError("Une consommation reçue est manquante ou invalide.")
-                quantities.append(quantity)
-        dbu = sum(quantities, Decimal(0)) if dbu_only else None
-        cost = dbu * rate if dbu is not None and rate is not None else None
-        result[component] = {"present": present, "dbu": dbu, "cost": cost, "rate": rate,
-                             "unsupported_unit": present and not dbu_only}
-    app_cost, sql_cost = result["application"]["cost"], result["warehouse"]["cost"]
-    result["attributable"] = (
-        app_cost + sql_cost if dedicated and app_cost is not None and sql_cost is not None
-        else None if dedicated else app_cost
-    )
+def price_usage(frame, resource):
+    """Pas d'arrondi intermédiaire ; les secondes ne sont jamais des DBU."""
+    result = frame.copy()
+    rate = parse_rate(resource["rate"])
+    unit = "DBU" if resource["kind"] == "serveur" else "s"
+    divisor = Decimal(1) if unit == "DBU" else Decimal(3600)
+    quantities, costs = [], []
+    for row in result.itertuples():
+        try:
+            value = Decimal(str(row.consommation))
+        except InvalidOperation:
+            value = Decimal("NaN")
+        valid = value.is_finite() and row.unite == unit and (unit == "DBU" or value >= 0)
+        quantities.append(value if valid else None)
+        costs.append(value / divisor * rate if valid else None)
+    result["consommation"] = quantities
+    result["cout_eur"] = costs
     return result
+
+
+def summarize_resource(priced):
+    values = [value for value in priced.get("cout_eur", []) if value is not None and pd.notna(value)]
+    quantities = [value for value in priced.get("consommation", []) if value is not None and pd.notna(value)]
+    missing = int(priced["manquantes"].sum()) if not priced.empty else 0
+    return {
+        "cost": sum(values, Decimal(0)) if values else None,
+        "quantity": sum(quantities, Decimal(0)) if quantities else None,
+        "partial": len(values) != len(priced) or missing > 0,
+        "queries": int(priced["nombre_requetes"].sum()) if not priced.empty else None,
+    }

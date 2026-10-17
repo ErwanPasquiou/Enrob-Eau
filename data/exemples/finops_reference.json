@@ -1,0 +1,41 @@
+{
+  "description": "Valeurs lisibles des captures transmises le 17/10/2026. Identités anonymisées. La capture compute ne contient aucune date ; ses totaux ne sont pas des valeurs quotidiennes.",
+  "server_sku": "PREMIUM_ALL_PURPOSE_SERVERLESS_COMPUTE_FRANCE_CENTRAL",
+  "server_daily_dbu": [
+    ["2026-10-14", "5.964842777777778"],
+    ["2026-10-13", "5.023505555555556"],
+    ["2026-10-12", "8.370833333333334"],
+    ["2026-10-09", "6.854247500000001"],
+    ["2026-10-08", "12"],
+    ["2026-10-07", "8.226250000000000"],
+    ["2026-10-05", "3.802736527777778"],
+    ["2026-10-04", "12"],
+    ["2026-10-03", "7.746535555555556"],
+    ["2026-10-02", "12"],
+    ["2026-10-01", "12"],
+    ["2026-09-30", "11.991237222222223"],
+    ["2026-09-29", "11.894888461111111"],
+    ["2026-09-28", "12"],
+    ["2026-09-27", "12"],
+    ["2026-09-26", "12"]
+  ],
+  "compute_totals": [
+    {"actor": "Compte technique 01", "queries": 23373, "seconds": "397259.75"},
+    {"actor": "Utilisateur 02", "queries": 376, "seconds": "326.63"},
+    {"actor": "Utilisateur 03", "queries": 361, "seconds": "208.44"},
+    {"actor": "Utilisateur 04", "queries": 236, "seconds": "270.39"},
+    {"actor": "Utilisateur 05", "queries": 93, "seconds": "205.21"},
+    {"actor": "Utilisateur 06", "queries": 37, "seconds": "168.39"},
+    {"actor": "Utilisateur 07", "queries": 31, "seconds": "56.47"},
+    {"actor": "Utilisateur 08", "queries": 11, "seconds": "5.90"},
+    {"actor": "Utilisateur 09", "queries": 9, "seconds": "9.83"},
+    {"actor": "Utilisateur 10", "queries": 5, "seconds": "1.08"},
+    {"actor": "Utilisateur 11", "queries": 1, "seconds": "0.66"},
+    {"actor": "Utilisateur 12", "queries": 1, "seconds": "0.25"}
+  ],
+  "simulation": {
+    "compute_window_start": "2026-10-08",
+    "compute_window_days": 7,
+    "note": "Fenêtre fictive du 08 au 14/10/2026 pour répartir les totaux compute. Toutes les autres dates et toutes les autres ressources sont simulées, sans valeur historique réelle."
+  }
+}
