@@ -12,6 +12,7 @@ Elle permet de signaler des travaux, de suivre leur avancement, de gérer les ph
 - [Photos](#photos)
 - [Adresses, carte et exports](#adresses-carte-et-exports)
 - [Identification et droits](#identification-et-droits)
+- [Administration — consommation et coûts](#administration--consommation-et-coûts)
 - [Installation et lancement](#installation-et-lancement)
 - [Données et stockage](#données-et-stockage)
 - [Organisation du code](#organisation-du-code)
@@ -68,7 +69,7 @@ Les anciens documents CODEX-001, CODEX-002 et CODEX-003 ne sont plus conservés 
 | **Demandes** | Liste des demandes de l'utilisateur connecté, cartes avec statut, recherche et filtre par statut. Création, consultation complète, modification de ses demandes et gestion de leurs photos. |
 | **Gestion des dossiers** | Recherche et filtres, détail des dossiers, mode grand écran, fil d'avancement, gestion des demandes/interventions/prestations et de leurs photos. Export d'un dossier. |
 | **Export** | Choix des tables et colonnes, filtres par dossier et téléchargement des données au format CSV. |
-| **Administration** | Création et modification des comptes, activation/désactivation et suppression. Réservée aux administrateurs. |
+| **Administration** | Deux espaces : gestion des utilisateurs (création, modification, activation/désactivation, suppression) et suivi des consommations/coûts de l'application et du SQL Warehouse. Réservée aux administrateurs. |
 | **Réfection définitive** | Espace du sous-traitant : tableau filtrable des prestations, modification des fiches, gestion de leurs photos et consultation des photos de la demande en lecture seule. |
 | **Reporting** | KPI calculés sur les demandes, interventions et prestations de l’application, graphiques, carte interactive, dossiers à suivre et photos enregistrées. Quatre autres sous-onglets réservés aux étapes suivantes. |
 
@@ -319,6 +320,50 @@ Le mode reste local pendant toute la session, même si Databricks redevient disp
 
 Pour retirer ce contournement : supprimer la branche de secours dans `services/auth_service.py`, le routage local dans `_get_table_name()` et `get_connection()` de `services/administration_service.py`, le bandeau dans `app.py` et le module `services/administration_fallback.py`. La base locale peut ensuite être archivée ou supprimée. Les données métier JSON et les photos restent indépendantes de ce mécanisme.
 
+## Administration — consommation et coûts
+
+L'espace **Consommation et coûts** lit les consommations des deux ressources configurées dans `system.billing.usage`. Il fonctionne indépendamment du chargement de la liste des utilisateurs. Les opérations de gestion des comptes et leurs droits restent identiques ; leur interface est isolée dans `components/administration_users.py` pour ne charger que l'espace sélectionné.
+
+### Utilisation
+
+1. Ouvrir **Administration → Consommation et coûts → Périmètre et tarifs**.
+2. Saisir l'identifiant de l'application (pas celui de son service principal) et celui du SQL Warehouse. Aucun workspace_id supplémentaire n'est requis : la lecture est limitée à ces deux identifiants.
+3. Renseigner les tarifs de référence **en €/DBU**. Le tarif application par défaut est **1 €/DBU**, selon le cadrage du porteur du projet ; le tarif SQL est volontairement vide tant qu'il n'est pas confirmé. Un prix en €/h n'est pas interchangeable avec un prix en €/DBU.
+4. Conserver le Warehouse en **partagé** tant qu'il sert à d'autres usages. Ne le déclarer dédié qu'après mise en place d'un Warehouse exclusif à Enrob'Eau.
+5. Choisir la période (mois en cours, précédent, 30 derniers jours ou dates personnalisées, 366 jours maximum), puis **Actualiser les consommations**.
+
+Les cartes affichent les DBU reçues et leur coût estimé. Le Warehouse partagé reste séparé du montant attribuable à l'application ; aucune allocation aux requêtes Enrob'Eau n'est inventée. En mode dédié, le total application + Warehouse n'est disponible que si les deux consommations et tarifs sont présents. L'évolution quotidienne en DBU et le détail par jour, SKU et unité sont consultables et exportables en CSV.
+
+Les réglages saisis sont conservés uniquement dans la session de l'administrateur. La lecture est manuelle, horodatée et conservée en mémoire dans cette session. Changer un tarif recalcule les montants sans relire la facturation ; changer de ressource, de période ou d'identité invalide les résultats précédents. Une erreur d'actualisation retire les anciens indicateurs. Il n'y a ni tâche planifiée, ni écriture dans les tables système, ni déploiement automatique.
+
+### Configuration persistante et accès
+
+Les variables d'environnement suivantes préremplissent les réglages. En local, les mêmes clés sont acceptées dans `.streamlit/secrets.toml`, exclu de Git. Les variables d'environnement ont priorité. Ne pas committer les identifiants réels ni la configuration locale dans ce dépôt public.
+
+| Variable | Utilisation |
+| --- | --- |
+| `FINOPS_APP_ID` | Application à suivre ; obligatoire avant lecture. |
+| `FINOPS_WAREHOUSE_ID` | Warehouse à suivre ; utilise `DATABRICKS_WAREHOUSE_ID` par défaut. |
+| `FINOPS_APP_EUR_PER_DBU` | Tarif de référence application, défaut `1`. |
+| `FINOPS_SQL_EUR_PER_DBU` | Tarif SQL, vide par défaut. |
+| `FINOPS_WAREHOUSE_DEDICATED` | `false` par défaut ; `true` pour un Warehouse exclusif à Enrob'Eau. |
+| `FINOPS_USAGE_TABLE` | `system.billing.usage` par défaut, ou vue compatible à trois niveaux `catalog.schema.vue`. |
+
+La connexion utilise le mécanisme Databricks existant et l'identité du service principal de l'application, via `DATABRICKS_WAREHOUSE_ID`. Le Warehouse de connexion peut différer de la ressource suivie ; ses propres coûts ne sont alors pas inclus automatiquement. L'identité doit pouvoir utiliser le Warehouse de connexion et lire la source (privilèges `USE CATALOG`, `USE SCHEMA`, `SELECT` adaptés). La DSI peut fournir une vue restreinte aux ressources concernées plutôt qu'un accès à la facturation de tout le compte. Cette vue doit conserver `usage_metadata.app_id`, `usage_metadata.warehouse_id`, `usage_date`, `sku_name`, `usage_unit`, `usage_quantity`, `usage_end_time` et `ingestion_date`.
+
+L'accès administrateur est revérifié côté service avant les lectures et avant de réafficher un résultat conservé en session. Le suivi réel est refusé en mode de secours SQLite ; il ne possède pas de données de démonstration intégrées. La gestion locale des comptes reste disponible selon son fonctionnement existant.
+
+### Interprétation et limites
+
+- Les jours sont en **UTC**. La publication des consommations est différée, généralement sous 12 h ; la journée en cours peut être incomplète et des corrections peuvent arriver ultérieurement. Le tableau indique la dernière consommation reçue et la dernière ingestion par ressource. Il ne garantit pas la complétude de la période.
+- Les quantités signées sont additionnées, y compris les enregistrements `ORIGINAL`, `RETRACTION` et `RESTATEMENT`. Aucune suppression des rétractions ni plancher à zéro : une correction peut produire un montant négatif.
+- Une absence de données, de tarif ou de permission n'est jamais convertie en coût nul. Si une ressource présente une unité autre que DBU, sa valorisation est suspendue et le détail reste consultable.
+- **DBU reçues × tarif de référence = coût estimé**, sans extrapolation annuelle. Un tarif unique est appliqué par ressource à toute la période et à ses SKU ; ce n'est pas la reconstitution d'une facture avec prix historiques, remises ou conversion de devises. Alfresco, stockage, maintenance, marge interne et éventuels frais Azure séparés des DBU SQL sont hors périmètre.
+- **Activité SQL du Warehouse** est une lecture facultative de `system.query.history`, nécessitant ses propres droits. Elle compte les requêtes démarrées sur la période et additionne `execution_duration_ms`, tous utilisateurs et applications confondus. Cette durée peut chevaucher plusieurs requêtes et n'inclut pas tout le temps de fonctionnement facturé. Elle n'est donc jamais utilisée pour calculer un coût. Son indisponibilité ne bloque pas la facturation.
+- Ouvrir le suivi ne lance pas de requête de facturation ou d'historique ; les boutons de lecture peuvent démarrer le Warehouse. Les vérifications habituelles du profil restent nécessaires et peuvent aussi solliciter le Warehouse.
+
+Sources des champs et règles : [table de consommation Databricks](https://learn.microsoft.com/en-us/azure/databricks/admin/system-tables/billing) et [historique SQL](https://learn.microsoft.com/en-us/azure/databricks/admin/system-tables/query-history).
+
 ## Installation et lancement
 
 ### Environnement Python
@@ -553,6 +598,7 @@ Points d'entrée utiles pour la maintenance :
 - [services/photo_service.py](services/photo_service.py) : stockage binaire, validation et contrôle de version des photos.
 - [services/auth_service.py](services/auth_service.py) et [services/administration_service.py](services/administration_service.py) : identité et comptes Databricks.
 - [services/administration_fallback.py](services/administration_fallback.py) : stockage SQLite temporaire des comptes en mode dégradé.
+- [services/cost_monitoring_service.py](services/cost_monitoring_service.py) et [components/cost_monitoring.py](components/cost_monitoring.py) : lectures FinOps, calculs et interface du suivi des consommations/coûts.
 - [components/photos.py](components/photos.py) : fenêtre d'ajout et actions sur les photos.
 
 ## Tests
@@ -568,6 +614,8 @@ La suite couvre notamment les filtres, les exports, les relations entre fiches, 
 Les tests de photos génèrent leurs images en mémoire et utilisent des dossiers temporaires. Ils ne déposent pas d'images d'exemple dans l'application. Les tests d'interface utilisent `streamlit.testing.v1.AppTest` ; ils ne remplacent pas une vérification du rendu et de la caméra sur un navigateur réel.
 
 Les tests CODEX-003 couvrent les listes et obligations, la précision « Autre », le compteur conditionnel, la persistance des choix multiples, la lecture des anciens JSON, les exports, les liens et photos, la concurrence, les cinq sections, le géocodage simulé et la conservation des saisies au retour de l'éditeur photo. Les tests de widgets créant des brouillons utilisent un stockage temporaire pour ne pas consommer les compteurs du projet.
+
+Les tests FinOps couvrent les tarifs manquants, les unités, les corrections signées, la séparation d'un Warehouse partagé, les droits d'accès, les paramètres SQL, le cache par périmètre et les interactions du nouvel espace Administration. Les lectures Databricks sont simulées dans ces tests : la validation des permissions et du schéma réels doit être réalisée dans l'environnement Databricks.
 
 ### Tests automatiques sur GitHub
 
